@@ -1,7 +1,9 @@
 # OpenTelemetry Deployment Collector – cluster-level collection
 #
-# Collects: Kubernetes events (k8sobjects receiver), cluster metrics
-# Single replica.
+# Uses a custom collector image (otelcol-krateo) that includes the
+# compositionresolver processor.  This processor enriches K8s events
+# with krateo.io/composition-id by resolving the involvedObject's
+# labels via the K8s API — the same logic EventRouter performed.
 #
 # Install:
 #   helm install otel-deployment open-telemetry/opentelemetry-collector \
@@ -12,7 +14,11 @@ mode: deployment
 replicaCount: 1
 
 image:
-  repository: otel/opentelemetry-collector-contrib
+  repository: ghcr.io/braghettos/otelcol-krateo
+  tag: latest
+
+command:
+  name: /otelcol-krateo
 
 clusterRole:
   create: true
@@ -30,6 +36,11 @@ clusterRole:
     - apiGroups: [autoscaling]
       resources: [horizontalpodautoscalers]
       verbs: [get, list, watch]
+    # compositionresolver needs GET on any resource type to resolve
+    # involvedObject references (CRDs from *.krateo.io, etc.)
+    - apiGroups: ["*"]
+      resources: ["*"]
+      verbs: [get]
 
 presets:
   kubernetesAttributes:
@@ -47,7 +58,6 @@ config:
         - name: events
           mode: watch
           group: ""
-          # Pull all namespaces
           namespaces: []
 
     k8s_cluster:
@@ -64,14 +74,20 @@ config:
       limit_percentage: 75
       spike_limit_percentage: 20
 
-    # Enrich K8s events with krateo.composition.id from the involved object's labels.
-    # The OTel kubernetesAttributes processor will set k8s.pod.labels.* attributes,
-    # including krateo.composition.id if that label is present on the object.
     resource:
       attributes:
         - key: telemetry.source
           value: "k8s-events"
           action: insert
+
+    # Resolves krateo.io/composition-id from the involvedObject's labels.
+    # For each K8s event, the processor GETs the involvedObject via the
+    # K8s API, reads its krateo.io/composition-id label, and sets it as
+    # a log-record attribute.  Results are cached by involvedObject UID.
+    compositionresolver:
+      cache_ttl: 5m
+      negative_cache_ttl: 30s
+      label_key: "krateo.io/composition-id"
 
   exporters:
     clickhouse:
@@ -94,7 +110,7 @@ config:
     pipelines:
       logs:
         receivers: [k8sobjects]
-        processors: [memory_limiter, k8sattributes, resource, batch]
+        processors: [memory_limiter, k8sattributes, resource, compositionresolver, batch]
         exporters: [clickhouse]
       metrics:
         receivers: [k8s_cluster]

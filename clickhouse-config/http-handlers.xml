@@ -7,7 +7,7 @@
   main config (which has no <http_handlers>). Built-in hardcoded handlers
   (/ping, /replicas_status, /play, etc.) remain available as fallbacks.
 
-  Endpoint: GET /events?composition_id=<id>[&limit=50]
+  Endpoint: GET /events?composition_id=<uid>[&limit=50]
   Returns:  FORMAT JSON rows; transformed into SSEK8sEvent by the RESTAction
             JQ filter in restaction.composition-events.yaml.
   Mount at: /etc/clickhouse-server/config.d/http-handlers.xml
@@ -21,18 +21,18 @@
 
     <!-- ================================================================
          Custom: Krateo K8s events endpoint
-         GET /events?composition_id=<id>[&limit=50]
-         {composition_id:String} is read from the URL query parameter.
+         GET /events?composition_id=<uid>[&limit=50]
+         {composition_id:String} is the composition resource's UID,
+         matching the value of label krateo.io/composition-id on managed
+         resources.
 
-         k8sobjects receiver stores events as raw Kubernetes watch JSON in Body:
-           Body = {"object": {"reason":"...", "message":"...", "type":"Normal|Warning",
-                              "involvedObject": {"name":"...", "namespace":"...",
-                                                 "kind":"...", "uid":"..."},
-                              "eventTime":"...", ...}, "type":"ADDED|MODIFIED"}
+         The compositionresolver OTel processor enriches each K8s event
+         log record with a LogAttribute "krateo.io/composition-id" by
+         resolving the involvedObject via the K8s API — the same logic
+         the old EventRouter performed.
 
-         We filter by k8s.namespace.name (ResourceAttribute set by the k8sobjects
-         receiver from the event's metadata.namespace), which maps to the Krateo
-         composition namespace. Event fields are extracted with JSONExtractString.
+         Event fields are extracted from the raw K8s watch JSON in Body
+         using JSONExtractString.
          ================================================================ -->
     <rule>
       <url>/events</url>
@@ -56,7 +56,7 @@
               ifNull(JSONExtractString(Body, 'object', 'source', 'component'), '')         AS source_component
           FROM otel_logs
           WHERE ResourceAttributes['telemetry.source'] = 'k8s-events'
-            AND ResourceAttributes['k8s.namespace.name'] = {composition_id:String}
+            AND LogAttributes['krateo.io/composition-id'] = {composition_id:String}
             AND JSONExtractString(Body, 'object', 'reason') != ''
           ORDER BY Timestamp DESC
           LIMIT 50
