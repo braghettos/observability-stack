@@ -81,7 +81,7 @@ log "==> Phase 2b: Patching HyperDX service to LoadBalancer..."
 # so we patch the service after Helm install/upgrade.
 kubectl patch svc krateo-clickstack-app \
   -n "$CH_NAMESPACE" \
-  -p '{"spec": {"type": "LoadBalancer"}}'
+  -p '{"spec": {"type": "LoadBalancer", "loadBalancerIP": "34.59.191.193"}}'
 
 log "HyperDX service patched to LoadBalancer."
 log "    Waiting for external IP (up to 60s)..."

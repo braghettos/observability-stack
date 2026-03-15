@@ -64,6 +64,10 @@ otel:
 #     -p '{"spec": {"type": "LoadBalancer"}}'
 hyperdx:
   enabled: true
+  # Must match the externally reachable URL so post-login redirects work correctly.
+  # Uses a reserved GCP static IP so the address survives Helm upgrades.
+  # Static IP: gcloud compute addresses create hyperdx-static-ip --region=us-central1 --project=neon-481711
+  appUrl: "http://34.59.191.193:3000"
   ingress:
     enabled: false
 
