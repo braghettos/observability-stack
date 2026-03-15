@@ -143,10 +143,9 @@ config:
         receivers: [k8sobjects]
         processors: [memory_limiter, k8sattributes, resource, compositionresolver, batch]
         exporters: [clickhouse]
-      metrics:
-        receivers: [k8s_cluster]
-        processors: [memory_limiter, k8sattributes, batch]
-        exporters: [clickhouse]
+      # Metrics pipeline disabled — clickhouseexporter v0.117.0 panics on
+      # gauge metrics with nil attribute values (SIGSEGV in gauge_metrics.go).
+      metrics: null
       traces: null
 
 resources:
