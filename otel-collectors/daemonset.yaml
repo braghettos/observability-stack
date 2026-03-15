@@ -8,6 +8,12 @@
 #   helm install otel-daemonset open-telemetry/opentelemetry-collector \
 #     -f daemonset.yaml -n clickhouse-system
 
+image:
+  repository: otel/opentelemetry-collector-contrib
+
+command:
+  name: otelcol-contrib
+
 mode: daemonset
 
 clusterRole:
@@ -26,7 +32,6 @@ presets:
   kubernetesAttributes:
     enabled: true
     extractAllPodLabels: true
-    extractAllPodAnnotations: true
   kubeletMetrics:
     enabled: true
 
@@ -71,9 +76,16 @@ config:
       spike_limit_percentage: 25
 
   exporters:
-    otlphttp:
-      endpoint: "http://krateo-clickstack-otel-collector.clickhouse-system.svc:4318"
-      compression: gzip
+    clickhouse:
+      endpoint: "tcp://krateo-clickstack-clickhouse.clickhouse-system.svc:9000"
+      username: otelcollector
+      password: otelcollectorpass
+      database: default
+      logs_table_name: otel_logs
+      traces_table_name: otel_traces
+      metrics_table_name: otel_metrics
+      create_schema: false
+      timeout: 10s
       retry_on_failure:
         enabled: true
         initial_interval: 5s
@@ -84,12 +96,12 @@ config:
     pipelines:
       logs:
         receivers: [filelog]
-        processors: [memory_limiter, kubernetesattributes, batch]
-        exporters: [otlphttp]
+        processors: [memory_limiter, k8sattributes, batch]
+        exporters: [clickhouse]
       metrics:
         receivers: [hostmetrics, kubeletstats]
-        processors: [memory_limiter, kubernetesattributes, batch]
-        exporters: [otlphttp]
+        processors: [memory_limiter, k8sattributes, batch]
+        exporters: [clickhouse]
 
 resources:
   limits:

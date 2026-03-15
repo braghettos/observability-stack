@@ -7,15 +7,22 @@
 #     --namespace clickhouse-system --create-namespace \
 #     -f values.yaml
 
+# Global settings applied across all sub-charts.
+# storageClassName overrides the chart default (local-path) for GKE compatibility.
+global:
+  storageClassName: "standard-rwo"
+
 # ---------------------------------------------------------------------------
 # ClickHouse
 # ---------------------------------------------------------------------------
 clickhouse:
   enabled: true
+  # Override chart default (25.7-alpine) to use ClickHouse 26.2.
+  # 26.2 fixes the dynamic_query_handler bad_function_call crash present in 25.7.
+  image: "clickhouse/clickhouse-server:26.2-alpine"
   persistence:
     enabled: true
     size: 50Gi
-    # storageClass: ""  # leave empty to use cluster default
   resources:
     limits:
       cpu: "4"
@@ -50,19 +57,15 @@ otel:
 # ---------------------------------------------------------------------------
 # HyperDX UI
 # ---------------------------------------------------------------------------
+# NOTE: The ClickStack chart does not expose a service.type value for HyperDX.
+# After install/upgrade, patch the service to LoadBalancer manually or via
+# install.sh (Phase 2b):
+#   kubectl patch svc krateo-clickstack-app -n clickhouse-system \
+#     -p '{"spec": {"type": "LoadBalancer"}}'
 hyperdx:
   enabled: true
   ingress:
     enabled: false
-    # Uncomment to expose HyperDX via ingress:
-    # annotations:
-    #   kubernetes.io/ingress.class: nginx
-    # hosts:
-    #   - host: hyperdx.example.com
-    #     paths:
-    #       - path: /
-    #         pathType: ImplementationSpecific
-    # tls: []
 
 # ---------------------------------------------------------------------------
 # MongoDB (used by HyperDX for persistent state)

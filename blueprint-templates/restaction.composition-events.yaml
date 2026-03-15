@@ -6,7 +6,7 @@ metadata:
 spec:
   api:
     - name: getEvents
-      path: "/events/{{ .Values.global.compositionId }}?limit=50"
+      path: "/events?composition_id={{ .Values.global.compositionId }}&limit=50"
       verb: GET
       # endpointRef now points to ClickHouse HTTP (predefined_query_handler).
       # The Secret clickhouse-internal-endpoint must exist in krateo-system and

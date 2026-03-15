@@ -3,22 +3,33 @@
   =====================================
   Exposes K8s events directly from otel_logs via a predefined_query_handler.
 
-  Endpoint: GET /events/{composition_id}
-  Returns:  JSON array (FORMAT JSON) of SSEK8sEvent-shaped rows.
+  IMPORTANT: When <http_handlers> is present in config.d, it is merged with the
+  main config (which has no <http_handlers>). Built-in hardcoded handlers
+  (/ping, /replicas_status, /play, etc.) remain available as fallbacks.
+
+  Endpoint: GET /events?composition_id=<id>[&limit=50]
+  Returns:  FORMAT JSON rows; transformed into SSEK8sEvent by the RESTAction
+            JQ filter in restaction.composition-events.yaml.
   Mount at: /etc/clickhouse-server/config.d/http-handlers.xml
 
-  The SELECT uses flat column aliases so the Krateo RESTAction JQ filter
-  can reconstruct the nested SSEK8sEvent structure without any bridge service.
+  NOTE: Uses query-parameter style (?composition_id=...) rather than path
+  parameters (/events/{id}) to avoid CDATA/regex angle-bracket parsing issues
+  in ClickHouse's XML config merger.
 -->
 <clickhouse>
   <http_handlers>
+
+    <!-- ================================================================
+         Custom: Krateo K8s events endpoint
+         GET /events?composition_id=<id>&limit=50
+         {composition_id:String} is read from the URL query parameter.
+         ================================================================ -->
     <rule>
-      <!-- Match: /events/<composition_id>  (no slashes in the id) -->
-      <url><![CDATA[/events/(?P<composition_id>[^/?]+)]]></url>
+      <url>/events</url>
       <methods>GET</methods>
       <handler>
         <type>predefined_query_handler</type>
-        <query><![CDATA[
+        <query>
           SELECT
               ifNull(ResourceAttributes['k8s.object.name'], '')            AS obj_name,
               ifNull(ResourceAttributes['k8s.namespace.name'], '')         AS obj_namespace,
@@ -38,20 +49,49 @@
           ORDER BY Timestamp DESC
           LIMIT 50
           FORMAT JSON
-        ]]></query>
+        </query>
       </handler>
     </rule>
 
-    <!-- Health check endpoint for liveness probes -->
+    <!-- /ping – preserve for Kubernetes startup/liveness probe -->
     <rule>
-      <url>/health</url>
-      <methods>GET</methods>
+      <url>/ping</url>
       <handler>
         <type>static</type>
         <status>200</status>
-        <content_type>text/plain</content_type>
-        <response_content>ok</response_content>
+        <content_type>text/plain; charset=UTF-8</content_type>
+        <response_content>Ok.
+</response_content>
       </handler>
     </rule>
+
+    <!-- /replicas_status – cluster health -->
+    <rule>
+      <url>/replicas_status</url>
+      <handler>
+        <type>replicas_status</type>
+      </handler>
+    </rule>
+
+    <!-- /metrics – Prometheus scrape -->
+    <rule>
+      <url>/metrics</url>
+      <handler>
+        <type>prometheus</type>
+      </handler>
+    </rule>
+
+    <!-- Default query handler at root path – required by clickhouse_connect and
+         any client using GET/POST /?query=... (must have explicit url to avoid
+         the bad_function_call crash in ClickHouse 25.7 with no-url catch-alls) -->
+    <rule>
+      <url>/</url>
+      <methods>GET,POST</methods>
+      <handler>
+        <type>dynamic_query_handler</type>
+        <query_param_name>query</query_param_name>
+      </handler>
+    </rule>
+
   </http_handlers>
 </clickhouse>

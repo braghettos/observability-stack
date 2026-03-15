@@ -73,6 +73,27 @@ log "Could not restart ClickHouse – restart the ClickHouse pod manually to app
 log "ClickHouse HTTP handlers configured."
 
 # ---------------------------------------------------------------------------
+# Phase 2b: Patch HyperDX service to LoadBalancer
+# ---------------------------------------------------------------------------
+log "==> Phase 2b: Patching HyperDX service to LoadBalancer..."
+
+# The ClickStack chart does not expose a service.type value for HyperDX,
+# so we patch the service after Helm install/upgrade.
+kubectl patch svc krateo-clickstack-app \
+  -n "$CH_NAMESPACE" \
+  -p '{"spec": {"type": "LoadBalancer"}}'
+
+log "HyperDX service patched to LoadBalancer."
+log "    Waiting for external IP (up to 60s)..."
+for i in $(seq 1 12); do
+  EXT_IP=$(kubectl get svc krateo-clickstack-app -n "$CH_NAMESPACE" \
+    -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+  [ -n "$EXT_IP" ] && break
+  sleep 5
+done
+log "    HyperDX UI: http://${EXT_IP:-<pending>}:3000"
+
+# ---------------------------------------------------------------------------
 # Phase 3: Deploy OTel collectors
 # ---------------------------------------------------------------------------
 log "==> Phase 3: Installing OTel collectors..."

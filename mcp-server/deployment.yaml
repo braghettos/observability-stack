@@ -29,28 +29,36 @@ spec:
     spec:
       containers:
         - name: mcp-server
-          image: ghcr.io/clickhouse/mcp-clickhouse:latest
+          image: mcp/clickhouse:latest
           imagePullPolicy: Always
           ports:
             - name: mcp
               containerPort: 8000
               protocol: TCP
           env:
+            # ClickHouse connection – host WITHOUT protocol prefix (interface controlled by CLICKHOUSE_SECURE)
             - name: CLICKHOUSE_HOST
-              # ClickHouse HTTP interface (port 8123).
-              value: "http://krateo-clickstack-clickhouse.clickhouse-system.svc"
+              value: "krateo-clickstack-clickhouse.clickhouse-system.svc"
             - name: CLICKHOUSE_PORT
               value: "8123"
+            - name: CLICKHOUSE_SECURE
+              value: "false"
+            - name: CLICKHOUSE_VERIFY
+              value: "false"
             - name: CLICKHOUSE_USER
               value: "default"
             - name: CLICKHOUSE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: clickhouse-credentials
-                  key: password
-                  optional: true
+              value: ""
             - name: CLICKHOUSE_DATABASE
               value: "default"
+            # Switch from stdio (default) to SSE transport so the server is
+            # reachable over HTTP inside the cluster.
+            - name: CLICKHOUSE_MCP_SERVER_TRANSPORT
+              value: "sse"
+            - name: CLICKHOUSE_MCP_BIND_HOST
+              value: "0.0.0.0"
+            - name: CLICKHOUSE_MCP_BIND_PORT
+              value: "8000"
           livenessProbe:
             httpGet:
               path: /health
@@ -72,7 +80,6 @@ spec:
               memory: 64Mi
           securityContext:
             readOnlyRootFilesystem: false
-            runAsNonRoot: true
             allowPrivilegeEscalation: false
 ---
 apiVersion: v1

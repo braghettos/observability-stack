@@ -1,7 +1,7 @@
 ---
 # ConfigMap wrapping the ClickHouse HTTP handler XML config.
-# Applied before the ClickStack Helm install so the extraVolumeMounts in
-# values.yaml can reference it.
+# Applied before the ClickStack Helm install so the volume mount in
+# clickstack/values.yaml can reference it.
 #
 # Apply: kubectl apply -f configmap.yaml -n clickhouse-system
 apiVersion: v1
@@ -14,11 +14,11 @@ data:
     <clickhouse>
       <http_handlers>
         <rule>
-          <url><![CDATA[/events/(?P<composition_id>[^/?]+)]]></url>
+          <url>/events</url>
           <methods>GET</methods>
           <handler>
             <type>predefined_query_handler</type>
-            <query><![CDATA[
+            <query>
               SELECT
                   ifNull(ResourceAttributes['k8s.object.name'], '')            AS obj_name,
                   ifNull(ResourceAttributes['k8s.namespace.name'], '')         AS obj_namespace,
@@ -38,17 +38,37 @@ data:
               ORDER BY Timestamp DESC
               LIMIT 50
               FORMAT JSON
-            ]]></query>
+            </query>
           </handler>
         </rule>
         <rule>
-          <url>/health</url>
-          <methods>GET</methods>
+          <url>/ping</url>
           <handler>
             <type>static</type>
             <status>200</status>
-            <content_type>text/plain</content_type>
-            <response_content>ok</response_content>
+            <content_type>text/plain; charset=UTF-8</content_type>
+            <response_content>Ok.
+    </response_content>
+          </handler>
+        </rule>
+        <rule>
+          <url>/replicas_status</url>
+          <handler>
+            <type>replicas_status</type>
+          </handler>
+        </rule>
+        <rule>
+          <url>/metrics</url>
+          <handler>
+            <type>prometheus</type>
+          </handler>
+        </rule>
+        <rule>
+          <url>/</url>
+          <methods>GET,POST</methods>
+          <handler>
+            <type>dynamic_query_handler</type>
+            <query_param_name>query</query_param_name>
           </handler>
         </rule>
       </http_handlers>
