@@ -21,8 +21,18 @@
 
     <!-- ================================================================
          Custom: Krateo K8s events endpoint
-         GET /events?composition_id=<id>&limit=50
+         GET /events?composition_id=<id>[&limit=50]
          {composition_id:String} is read from the URL query parameter.
+
+         k8sobjects receiver stores events as raw Kubernetes watch JSON in Body:
+           Body = {"object": {"reason":"...", "message":"...", "type":"Normal|Warning",
+                              "involvedObject": {"name":"...", "namespace":"...",
+                                                 "kind":"...", "uid":"..."},
+                              "eventTime":"...", ...}, "type":"ADDED|MODIFIED"}
+
+         We filter by k8s.namespace.name (ResourceAttribute set by the k8sobjects
+         receiver from the event's metadata.namespace), which maps to the Krateo
+         composition namespace. Event fields are extracted with JSONExtractString.
          ================================================================ -->
     <rule>
       <url>/events</url>
@@ -31,21 +41,23 @@
         <type>predefined_query_handler</type>
         <query>
           SELECT
-              ifNull(ResourceAttributes['k8s.object.name'], '')            AS obj_name,
-              ifNull(ResourceAttributes['k8s.namespace.name'], '')         AS obj_namespace,
-              ifNull(ResourceAttributes['k8s.object.uid'], '')             AS obj_uid,
-              ifNull(ResourceAttributes['k8s.object.kind'], '')            AS obj_kind,
-              ifNull(ResourceAttributes['k8s.event.reason'], '')           AS reason,
-              ifNull(Body, '')                                             AS message,
-              multiIf(
-                SeverityText IN ('WARN', 'WARNING', 'ERROR', 'FATAL'), 'Warning',
-                'Normal'
-              )                                                            AS type,
-              formatDateTime(toDateTime(Timestamp), '%Y-%m-%dT%H:%i:%SZ', 'UTC') AS eventTime,
-              ifNull(ResourceAttributes['k8s.event.source.component'], '') AS source_component
+              ifNull(JSONExtractString(Body, 'object', 'involvedObject', 'name'), '')      AS obj_name,
+              ifNull(JSONExtractString(Body, 'object', 'involvedObject', 'namespace'), '') AS obj_namespace,
+              ifNull(JSONExtractString(Body, 'object', 'involvedObject', 'uid'), '')       AS obj_uid,
+              ifNull(JSONExtractString(Body, 'object', 'involvedObject', 'kind'), '')      AS obj_kind,
+              ifNull(JSONExtractString(Body, 'object', 'reason'), '')                      AS reason,
+              ifNull(JSONExtractString(Body, 'object', 'message'), '')                     AS message,
+              ifNull(JSONExtractString(Body, 'object', 'type'), 'Normal')                  AS type,
+              coalesce(
+                  nullIf(JSONExtractString(Body, 'object', 'eventTime'), ''),
+                  nullIf(JSONExtractString(Body, 'object', 'lastTimestamp'), ''),
+                  formatDateTime(toDateTime(Timestamp), '%Y-%m-%dT%H:%i:%SZ', 'UTC')
+              )                                                                             AS eventTime,
+              ifNull(JSONExtractString(Body, 'object', 'source', 'component'), '')         AS source_component
           FROM otel_logs
-          WHERE ResourceAttributes['krateo.composition.id'] = {composition_id:String}
-            AND ResourceAttributes['k8s.event.reason'] != ''
+          WHERE ResourceAttributes['telemetry.source'] = 'k8s-events'
+            AND ResourceAttributes['k8s.namespace.name'] = {composition_id:String}
+            AND JSONExtractString(Body, 'object', 'reason') != ''
           ORDER BY Timestamp DESC
           LIMIT 50
           FORMAT JSON
