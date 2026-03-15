@@ -64,12 +64,16 @@ otel:
 #     -p '{"spec": {"type": "LoadBalancer"}}'
 hyperdx:
   enabled: true
-  # Must match the externally reachable URL so post-login redirects work correctly.
+  # appUrl must NOT include the port — the chart template appends ":appPort" automatically.
+  # NEXTAUTH_URL must be set explicitly so Next.js auth redirects to the correct external URL.
   # Uses a reserved GCP static IP so the address survives Helm upgrades.
   # Static IP: gcloud compute addresses create hyperdx-static-ip --region=us-central1 --project=neon-481711
-  appUrl: "http://34.59.191.193:3000"
+  appUrl: "http://34.59.191.193"
   ingress:
     enabled: false
+  env:
+    - name: NEXTAUTH_URL
+      value: "http://34.59.191.193:3000"
 
 # ---------------------------------------------------------------------------
 # MongoDB (used by HyperDX for persistent state)
