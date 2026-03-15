@@ -129,7 +129,7 @@ config:
       logs_table_name: otel_logs
       traces_table_name: otel_traces
       metrics_table_name: otel_metrics
-      create_schema: false
+      create_schema: true
       timeout: 10s
       retry_on_failure:
         enabled: true
@@ -143,9 +143,10 @@ config:
         receivers: [k8sobjects]
         processors: [memory_limiter, k8sattributes, resource, compositionresolver, batch]
         exporters: [clickhouse]
-      # Metrics pipeline disabled — clickhouseexporter v0.117.0 panics on
-      # gauge metrics with nil attribute values (SIGSEGV in gauge_metrics.go).
-      metrics: null
+      metrics:
+        receivers: [k8s_cluster]
+        processors: [memory_limiter, batch]
+        exporters: [clickhouse]
       traces: null
 
 resources:
