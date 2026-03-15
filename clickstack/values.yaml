@@ -1,0 +1,73 @@
+# ClickStack Helm values for Krateo Kubernetes Observability
+#
+# Install:
+#   helm repo add clickstack https://clickhouse.github.io/ClickStack-helm-charts
+#   helm repo update
+#   helm install krateo-clickstack clickstack/clickstack \
+#     --namespace clickhouse-system --create-namespace \
+#     -f values.yaml
+
+# ---------------------------------------------------------------------------
+# ClickHouse
+# ---------------------------------------------------------------------------
+clickhouse:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 50Gi
+    # storageClass: ""  # leave empty to use cluster default
+  resources:
+    limits:
+      cpu: "4"
+      memory: 8Gi
+    requests:
+      cpu: "1"
+      memory: 2Gi
+  # Extra configuration files mounted into /etc/clickhouse-server/config.d/
+  # The http-handlers ConfigMap is applied separately (see clickhouse-config/).
+  extraVolumes:
+    - name: http-handlers-config
+      configMap:
+        name: clickhouse-http-handlers
+  extraVolumeMounts:
+    - name: http-handlers-config
+      mountPath: /etc/clickhouse-server/config.d/http-handlers.xml
+      subPath: http-handlers.xml
+
+# ---------------------------------------------------------------------------
+# OpenTelemetry Collector Gateway (receives from DaemonSet + Deployment collectors)
+# ---------------------------------------------------------------------------
+otel:
+  enabled: true
+  resources:
+    limits:
+      cpu: "1"
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+# ---------------------------------------------------------------------------
+# HyperDX UI
+# ---------------------------------------------------------------------------
+hyperdx:
+  enabled: true
+  ingress:
+    enabled: false
+    # Uncomment to expose HyperDX via ingress:
+    # annotations:
+    #   kubernetes.io/ingress.class: nginx
+    # hosts:
+    #   - host: hyperdx.example.com
+    #     paths:
+    #       - path: /
+    #         pathType: ImplementationSpecific
+    # tls: []
+
+# ---------------------------------------------------------------------------
+# MongoDB (used by HyperDX for persistent state)
+# ---------------------------------------------------------------------------
+mongodb:
+  enabled: true
+  persistence:
+    size: 10Gi

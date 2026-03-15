@@ -1,0 +1,105 @@
+# OpenTelemetry Deployment Collector – cluster-level collection
+#
+# Collects: Kubernetes events (k8sobjects receiver), cluster metrics
+# Single replica.
+#
+# Install:
+#   helm install otel-deployment open-telemetry/opentelemetry-collector \
+#     -f deployment.yaml -n clickhouse-system
+
+mode: deployment
+
+replicaCount: 1
+
+image:
+  repository: otel/opentelemetry-collector-contrib
+  tag: "0.123.0"
+
+clusterRole:
+  create: true
+  rules:
+    - apiGroups: [""]
+      resources: [events, namespaces, nodes, pods, replicationcontrollers,
+                  resourcequotas, services, endpoints]
+      verbs: [get, list, watch]
+    - apiGroups: [apps]
+      resources: [daemonsets, deployments, replicasets, statefulsets]
+      verbs: [get, list, watch]
+    - apiGroups: [batch]
+      resources: [jobs, cronjobs]
+      verbs: [get, list, watch]
+    - apiGroups: [autoscaling]
+      resources: [horizontalpodautoscalers]
+      verbs: [get, list, watch]
+
+presets:
+  kubernetesAttributes:
+    enabled: true
+    extractAllPodLabels: true
+    extractAllPodAnnotations: true
+  kubernetesEvents:
+    enabled: true
+  clusterMetrics:
+    enabled: true
+
+config:
+  receivers:
+    k8sobjects:
+      objects:
+        - name: events
+          mode: watch
+          group: ""
+          # Pull all namespaces
+          namespaces: []
+
+    k8s_cluster:
+      collection_interval: 30s
+      node_conditions_to_report: [Ready, MemoryPressure, DiskPressure, PIDPressure]
+      allocatable_types_to_report: [cpu, memory, ephemeral-storage]
+
+  processors:
+    batch:
+      send_batch_size: 10000
+      timeout: 5s
+    memory_limiter:
+      check_interval: 5s
+      limit_percentage: 75
+      spike_limit_percentage: 20
+
+    # Enrich K8s events with krateo.composition.id from the involved object's labels.
+    # The OTel kubernetesAttributes processor will set k8s.pod.labels.* attributes,
+    # including krateo.composition.id if that label is present on the object.
+    resource:
+      attributes:
+        - key: telemetry.source
+          value: "k8s-events"
+          action: insert
+
+  exporters:
+    otlphttp:
+      endpoint: "http://krateo-clickstack-otel-collector.clickhouse-system.svc:4318"
+      compression: gzip
+      retry_on_failure:
+        enabled: true
+        initial_interval: 5s
+        max_interval: 30s
+        max_elapsed_time: 300s
+
+  service:
+    pipelines:
+      logs:
+        receivers: [k8sobjects]
+        processors: [memory_limiter, kubernetesattributes, resource, batch]
+        exporters: [otlphttp]
+      metrics:
+        receivers: [k8s_cluster]
+        processors: [memory_limiter, kubernetesattributes, batch]
+        exporters: [otlphttp]
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi

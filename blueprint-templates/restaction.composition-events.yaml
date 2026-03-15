@@ -1,0 +1,52 @@
+apiVersion: templates.krateo.io/v1
+kind: RESTAction
+metadata:
+  name: {{ .Values.global.compositionKind | lower }}-{{ .Values.global.compositionName }}-composition-events
+  namespace: {{ .Values.global.compositionNamespace }}
+spec:
+  api:
+    - name: getEvents
+      path: "/events/{{ .Values.global.compositionId }}?limit=50"
+      verb: GET
+      # endpointRef now points to ClickHouse HTTP (predefined_query_handler).
+      # The Secret clickhouse-internal-endpoint must exist in krateo-system and
+      # contain server-url: http://krateo-clickstack-clickhouse.clickhouse-system.svc:8123
+      endpointRef:
+        name: clickhouse-internal-endpoint
+        namespace: {{ .Values.global.krateoNamespace }}
+      headers:
+        - 'Accept: application/json'
+      continueOnError: true
+      errorKey: getEventsError
+  # ClickHouse returns FORMAT JSON: {"data":[{flat columns}], "meta":[...], ...}
+  # This filter reconstructs the nested SSEK8sEvent structure from the flat rows
+  # so the EventList widgetDataTemplate receives the shape it expects.
+  filter: >
+    {
+      list: [
+        (.getEvents.data // [])[]
+        | {
+            metadata: {
+              name:              .obj_name,
+              namespace:         .obj_namespace,
+              uid:               .obj_uid,
+              creationTimestamp: .eventTime
+            },
+            involvedObject: {
+              kind:      .obj_kind,
+              name:      .obj_name,
+              namespace: .obj_namespace,
+              uid:       .obj_uid
+            },
+            reason:         .reason,
+            message:        .message,
+            type:           .type,
+            firstTimestamp: .eventTime,
+            lastTimestamp:  .eventTime,
+            eventTime:      .eventTime,
+            source: {
+              component: .source_component
+            }
+          }
+      ]
+    }

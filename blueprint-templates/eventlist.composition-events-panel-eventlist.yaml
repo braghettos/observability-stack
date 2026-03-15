@@ -1,0 +1,55 @@
+# EventList template – NO CHANGES required to this file.
+#
+# The only change needed for SSE is to update the frontend config.json so that
+# EVENTS_PUSH_API_BASE_URL points to the krateo-sse-proxy Service instead of eventsse:
+#
+#   "EVENTS_PUSH_API_BASE_URL": "http://krateo-sse-proxy.krateo-system.svc:8080"
+#
+# The sseEndpoint (/notifications/) and sseTopic (compositionId) remain unchanged.
+kind: EventList
+apiVersion: widgets.templates.krateo.io/v1beta1
+metadata:
+  name: {{ .Values.global.compositionKind | lower }}-{{ .Values.global.compositionName }}-composition-events-panel-eventlist
+  namespace: {{ .Values.global.compositionNamespace }}
+spec:
+  widgetData:
+    events: []
+    sseEndpoint: "/notifications/"
+    sseTopic: "{{ .Values.global.compositionId }}"
+  widgetDataTemplate:
+    - forPath: events
+      expression: >
+        ${
+          .list
+          | map(
+              .firstTimestamp = ( if (.firstTimestamp // "") == ""
+                                  then (.eventTime // .lastTimestamp // null)
+                                  else .firstTimestamp
+                                  end ) |
+              .lastTimestamp  = ( if (.lastTimestamp // "") == ""
+                                  then (.firstTimestamp // .eventTime // null)
+                                  else .lastTimestamp
+                                  end ) |
+              .eventTime      = ( if (.eventTime // "") == ""
+                                  then (.firstTimestamp // .lastTimestamp // null)
+                                  else .eventTime
+                                  end ) |
+              .message        = ( if (.message // "") == ""
+                                  then (.reason // "")
+                                  else .message
+                                  end ) |
+              .involvedObject.namespace = (.involvedObject.namespace // "") |
+              del(
+                .metadata.resourceVersion,
+                .metadata.annotations,
+                .metadata.labels,
+                .metadata.managedFields,
+                .metadata.generatedName,
+                .involvedObject.resourceVersion,
+                .series
+              )
+            )
+        }
+  apiRef:
+    name: {{ .Values.global.compositionKind | lower }}-{{ .Values.global.compositionName }}-composition-events
+    namespace: {{ .Values.global.compositionNamespace }}

@@ -1,0 +1,57 @@
+<!--
+  ClickHouse HTTP Handler Configuration
+  =====================================
+  Exposes K8s events directly from otel_logs via a predefined_query_handler.
+
+  Endpoint: GET /events/{composition_id}
+  Returns:  JSON array (FORMAT JSON) of SSEK8sEvent-shaped rows.
+  Mount at: /etc/clickhouse-server/config.d/http-handlers.xml
+
+  The SELECT uses flat column aliases so the Krateo RESTAction JQ filter
+  can reconstruct the nested SSEK8sEvent structure without any bridge service.
+-->
+<clickhouse>
+  <http_handlers>
+    <rule>
+      <!-- Match: /events/<composition_id>  (no slashes in the id) -->
+      <url><![CDATA[/events/(?P<composition_id>[^/?]+)]]></url>
+      <methods>GET</methods>
+      <handler>
+        <type>predefined_query_handler</type>
+        <query><![CDATA[
+          SELECT
+              ifNull(ResourceAttributes['k8s.object.name'], '')            AS obj_name,
+              ifNull(ResourceAttributes['k8s.namespace.name'], '')         AS obj_namespace,
+              ifNull(ResourceAttributes['k8s.object.uid'], '')             AS obj_uid,
+              ifNull(ResourceAttributes['k8s.object.kind'], '')            AS obj_kind,
+              ifNull(ResourceAttributes['k8s.event.reason'], '')           AS reason,
+              ifNull(Body, '')                                             AS message,
+              multiIf(
+                SeverityText IN ('WARN', 'WARNING', 'ERROR', 'FATAL'), 'Warning',
+                'Normal'
+              )                                                            AS type,
+              formatDateTime(toDateTime(Timestamp), '%Y-%m-%dT%H:%i:%SZ', 'UTC') AS eventTime,
+              ifNull(ResourceAttributes['k8s.event.source.component'], '') AS source_component
+          FROM otel_logs
+          WHERE ResourceAttributes['krateo.composition.id'] = {composition_id:String}
+            AND ResourceAttributes['k8s.event.reason'] != ''
+          ORDER BY Timestamp DESC
+          LIMIT 50
+          FORMAT JSON
+        ]]></query>
+      </handler>
+    </rule>
+
+    <!-- Health check endpoint for liveness probes -->
+    <rule>
+      <url>/health</url>
+      <methods>GET</methods>
+      <handler>
+        <type>static</type>
+        <status>200</status>
+        <content_type>text/plain</content_type>
+        <response_content>ok</response_content>
+      </handler>
+    </rule>
+  </http_handlers>
+</clickhouse>
