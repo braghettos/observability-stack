@@ -2,10 +2,7 @@ name: SSE Proxy – Build & Push
 
 on:
   push:
-    branches: [main]
-    paths:
-      - "sse-proxy/**"
-      - ".github/workflows/sse-proxy.yaml"
+    tags: ["sse-v*"]
   pull_request:
     branches: [main]
     paths:
@@ -59,13 +56,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # short SHA on every push to main
+            type=match,pattern=sse-v(.*),group=1
+            type=match,pattern=sse-v(\d+\.\d+),group=1
             type=sha,prefix=sha-,format=short
-            # rolling "latest" tag only on main
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            # semver tags if a vX.Y.Z tag is pushed
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
 
       - name: Build and push
         uses: docker/build-push-action@v6

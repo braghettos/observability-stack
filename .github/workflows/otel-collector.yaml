@@ -2,10 +2,7 @@ name: OTel Collector – Build & Push
 
 on:
   push:
-    branches: [main]
-    paths:
-      - "otel-collector-custom/**"
-      - ".github/workflows/otel-collector.yaml"
+    tags: ["otel-v*"]
   pull_request:
     branches: [main]
     paths:
@@ -49,10 +46,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
+            type=match,pattern=otel-v(.*),group=1
+            type=match,pattern=otel-v(\d+\.\d+),group=1
             type=sha,prefix=sha-,format=short
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
 
       - name: Build and push
         uses: docker/build-push-action@v6
