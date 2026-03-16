@@ -144,10 +144,7 @@ config:
         receivers: [k8sobjects]
         processors: [memory_limiter, k8sattributes, resource, compositionresolver, batch]
         exporters: [clickhouse]
-      metrics:
-        receivers: [k8s_cluster]
-        processors: [memory_limiter, batch]
-        exporters: [clickhouse]
+      metrics: null
       traces: null
 
 resources:
