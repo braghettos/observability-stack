@@ -177,5 +177,7 @@ Next steps:
   4. To use the MCP server in Cursor:
        kubectl port-forward svc/clickhouse-mcp-server 8000:8000 -n $KRATEO_NAMESPACE
        # Add to .cursor/mcp.json: {"mcpServers": {"clickhouse": {"url": "http://localhost:8000/mcp"}}}
+  5. Pod restart alerts to Slack (optional):
+       See pod-restart-alert/README.md – create the alert in the HyperDX UI
 ===========================================================================
 EOF
