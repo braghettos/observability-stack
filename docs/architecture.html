@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Krateo Observability Stack — Architecture</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #f8f9fa; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+  h1 { text-align: center; padding: 24px 0 8px; color: #1a1a2e; font-size: 1.6rem; letter-spacing: -0.5px; }
+  .subtitle { text-align: center; color: #666; font-size: 0.85rem; margin-bottom: 0; }
+  svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+</style>
+</head>
+<body>
+<h1>Krateo Observability Stack</h1>
+<p class="subtitle">End-to-end architecture: collection, storage, frontend, alerting, and AI agents</p>
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 718" width="1100" height="718">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#666"/></marker>
+    <marker id="arr-b" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#1565c0"/></marker>
+    <marker id="arr-o" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#e65100"/></marker>
+    <marker id="arr-g" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#2e7d32"/></marker>
+    <marker id="arr-p" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#6a1b9a"/></marker>
+    <marker id="arr-t" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#00695c"/></marker>
+    <marker id="arr-br" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#4e342e"/></marker>
+    <marker id="arr-ao" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#ef6c00"/></marker>
+
+    <filter id="sh" x="-3%" y="-3%" width="106%" height="110%">
+      <feDropShadow dx="1" dy="2" stdDeviation="2.5" flood-opacity="0.08"/>
+    </filter>
+
+    <linearGradient id="gK" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#e3f2fd"/><stop offset="100%" stop-color="#bbdefb"/></linearGradient>
+    <linearGradient id="gW" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#e8eaf6"/><stop offset="100%" stop-color="#c5cae9"/></linearGradient>
+    <linearGradient id="gO" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#fff3e0"/><stop offset="100%" stop-color="#ffe0b2"/></linearGradient>
+    <linearGradient id="gC" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#fce4ec"/><stop offset="100%" stop-color="#f8bbd0"/></linearGradient>
+    <linearGradient id="gF" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#e8f5e9"/><stop offset="100%" stop-color="#c8e6c9"/></linearGradient>
+    <linearGradient id="gA" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f3e5f5"/><stop offset="100%" stop-color="#e1bee7"/></linearGradient>
+    <linearGradient id="gS" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#efebe9"/><stop offset="100%" stop-color="#d7ccc8"/></linearGradient>
+    <linearGradient id="gAg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#fff8e1"/><stop offset="100%" stop-color="#ffecb3"/></linearGradient>
+    <linearGradient id="gM" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#e0f7fa"/><stop offset="100%" stop-color="#b2ebf2"/></linearGradient>
+  </defs>
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <!-- KUBERNETES CLUSTER — outer boundary wrapping everything           -->
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <rect x="8" y="8" width="1084" height="704" rx="14" fill="none" stroke="#90a4ae" stroke-width="2" stroke-dasharray="8,4"/>
+  <rect x="14" y="12" width="180" height="20" rx="4" fill="#eceff1"/>
+  <text x="104" y="26" text-anchor="middle" fill="#455a64" font-size="10" font-weight="600" letter-spacing="0.5">KUBERNETES CLUSTER</text>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <!-- ROW 1 — DATA PRODUCERS  (y: 46–260)                              -->
+  <!--   C1: Krateo + K8s    C2: OTel    C3: ClickHouse    C4: Frontend -->
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+
+  <!-- ── C1: Krateo Components ─────────────────────────────────────── -->
+  <rect x="20" y="46" width="220" height="218" rx="10" fill="#f0f4ff" stroke="#bbdefb" stroke-width="1" opacity="0.5"/>
+  <text x="130" y="64" text-anchor="middle" fill="#1565c0" font-size="9" font-weight="600" letter-spacing="1">KRATEO COMPONENTS</text>
+
+  <rect x="32" y="74" width="196" height="34" rx="6" fill="url(#gK)" stroke="#1565c0" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="130" y="96" text-anchor="middle" fill="#0d47a1" font-size="10" font-weight="600">Frontend + Snowplow</text>
+
+  <rect x="32" y="114" width="196" height="34" rx="6" fill="url(#gK)" stroke="#1565c0" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="130" y="136" text-anchor="middle" fill="#0d47a1" font-size="10" font-weight="600">Composition Dynamic Ctrl</text>
+
+  <rect x="32" y="154" width="96" height="28" rx="5" fill="url(#gK)" stroke="#1565c0" stroke-width="1.2" filter="url(#sh)"/>
+  <text x="80" y="173" text-anchor="middle" fill="#0d47a1" font-size="9" font-weight="500">Core Provider</text>
+
+  <rect x="134" y="154" width="94" height="28" rx="5" fill="url(#gK)" stroke="#1565c0" stroke-width="1.2" filter="url(#sh)"/>
+  <text x="181" y="173" text-anchor="middle" fill="#0d47a1" font-size="9" font-weight="500">AuthN / AuthZ</text>
+
+  <rect x="32" y="188" width="196" height="28" rx="5" fill="url(#gK)" stroke="#1565c0" stroke-width="1.2" filter="url(#sh)"/>
+  <text x="130" y="207" text-anchor="middle" fill="#0d47a1" font-size="9" font-weight="500">Providers (Helm, GitHub, ...)</text>
+
+  <!-- Signal pills -->
+  <rect x="34"  y="224" width="44" height="16" rx="8" fill="#e3f2fd" stroke="#1565c0" stroke-width="0.8"/>
+  <text x="56"  y="235" text-anchor="middle" fill="#0d47a1" font-size="7.5" font-weight="500">Logs</text>
+  <rect x="84"  y="224" width="50" height="16" rx="8" fill="#e3f2fd" stroke="#1565c0" stroke-width="0.8"/>
+  <text x="109" y="235" text-anchor="middle" fill="#0d47a1" font-size="7.5" font-weight="500">Events</text>
+  <rect x="140" y="224" width="46" height="16" rx="8" fill="#e3f2fd" stroke="#1565c0" stroke-width="0.8"/>
+  <text x="163" y="235" text-anchor="middle" fill="#0d47a1" font-size="7.5" font-weight="500">Traces</text>
+  <rect x="192" y="224" width="18" height="16" rx="8" fill="#e3f2fd" stroke="#1565c0" stroke-width="0.8"/>
+  <text x="201" y="235" text-anchor="middle" fill="#0d47a1" font-size="7.5" font-weight="500">M</text>
+
+  <!-- ── C1b: Other K8s Workloads ──────────────────────────────────── -->
+  <rect x="20" y="272" width="220" height="46" rx="8" fill="url(#gW)" stroke="#3f51b5" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="130" y="293" text-anchor="middle" fill="#1a237e" font-size="10" font-weight="600">Other K8s Workloads</text>
+  <text x="130" y="307" text-anchor="middle" fill="#3f51b5" font-size="8">Deployments, Jobs, CronJobs, ...</text>
+
+
+  <!-- ── C2: OTel Collectors ───────────────────────────────────────── -->
+  <rect x="268" y="46" width="216" height="272" rx="10" fill="#fff8f0" stroke="#ffe0b2" stroke-width="1" opacity="0.5"/>
+  <text x="376" y="64" text-anchor="middle" fill="#e65100" font-size="9" font-weight="600" letter-spacing="1">OTEL COLLECTORS</text>
+
+  <rect x="278" y="74" width="196" height="56" rx="7" fill="url(#gO)" stroke="#e65100" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="376" y="92" text-anchor="middle" fill="#bf360c" font-size="10" font-weight="600">OTel DaemonSet</text>
+  <text x="376" y="106" text-anchor="middle" fill="#5d4037" font-size="7.5">filelog · hostmetrics · kubeletstats</text>
+  <text x="376" y="120" text-anchor="middle" fill="#e65100" font-size="7" font-style="italic">per node</text>
+
+  <rect x="278" y="140" width="196" height="56" rx="7" fill="url(#gO)" stroke="#e65100" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="376" y="158" text-anchor="middle" fill="#bf360c" font-size="10" font-weight="600">OTel Deployment</text>
+  <text x="376" y="172" text-anchor="middle" fill="#5d4037" font-size="7.5">k8sobjects · k8s_cluster</text>
+  <text x="376" y="186" text-anchor="middle" fill="#e65100" font-size="7" font-style="italic">compositionresolver · cluster-level</text>
+
+  <rect x="278" y="206" width="196" height="48" rx="7" fill="url(#gO)" stroke="#e65100" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="376" y="226" text-anchor="middle" fill="#bf360c" font-size="10" font-weight="600">OTel Gateway</text>
+  <text x="376" y="240" text-anchor="middle" fill="#5d4037" font-size="7.5">OTLP/HTTP :4318 · ClickStack</text>
+
+  <!-- Signals arrow area -->
+  <rect x="278" y="264" width="196" height="46" rx="6" fill="#fff3e0" stroke="#ffe0b2" stroke-width="0.5" opacity="0.6"/>
+  <text x="376" y="280" text-anchor="middle" fill="#5d4037" font-size="7">Exports to ClickHouse via</text>
+  <text x="376" y="292" text-anchor="middle" fill="#5d4037" font-size="7">clickhouseexporter (:9000 TCP)</text>
+
+
+  <!-- ── C3: ClickHouse ────────────────────────────────────────────── -->
+  <rect x="512" y="46" width="216" height="272" rx="10" fill="url(#gC)" stroke="#b71c1c" stroke-width="2" filter="url(#sh)"/>
+  <text x="620" y="68" text-anchor="middle" fill="#b71c1c" font-size="12" font-weight="700">ClickHouse</text>
+  <text x="620" y="84" text-anchor="middle" fill="#c62828" font-size="8">:8123 HTTP  /  :9000 TCP</text>
+  <line x1="528" y1="92" x2="712" y2="92" stroke="#b71c1c" stroke-width="0.5" opacity="0.3"/>
+
+  <rect x="528" y="100" width="176" height="24" rx="4" fill="#fff" stroke="#c62828" stroke-width="1" opacity="0.8"/>
+  <text x="620" y="116" text-anchor="middle" fill="#b71c1c" font-size="10" font-weight="500">otel_logs</text>
+
+  <rect x="528" y="130" width="176" height="24" rx="4" fill="#fff" stroke="#c62828" stroke-width="1" opacity="0.8"/>
+  <text x="620" y="146" text-anchor="middle" fill="#b71c1c" font-size="10" font-weight="500">otel_traces</text>
+
+  <rect x="528" y="160" width="176" height="24" rx="4" fill="#fff" stroke="#c62828" stroke-width="1" opacity="0.8"/>
+  <text x="620" y="176" text-anchor="middle" fill="#b71c1c" font-size="10" font-weight="500">otel_metrics</text>
+
+  <line x1="528" y1="194" x2="712" y2="194" stroke="#b71c1c" stroke-width="0.5" opacity="0.3"/>
+
+  <rect x="528" y="202" width="176" height="24" rx="4" fill="#fff" stroke="#c62828" stroke-width="1" opacity="0.8"/>
+  <text x="620" y="218" text-anchor="middle" fill="#b71c1c" font-size="9" font-weight="500">/events?composition_id=X</text>
+
+  <rect x="528" y="232" width="176" height="22" rx="4" fill="#fff" stroke="#c62828" stroke-width="1" opacity="0.8"/>
+  <text x="620" y="247" text-anchor="middle" fill="#c62828" font-size="8">predefined_query_handler</text>
+
+  <!-- HyperDX (inside ClickHouse area) -->
+  <rect x="528" y="262" width="176" height="44" rx="5" fill="#fff" stroke="#6a1b9a" stroke-width="1" opacity="0.9"/>
+  <text x="620" y="280" text-anchor="middle" fill="#4a148c" font-size="9" font-weight="500">HyperDX (MongoDB)</text>
+  <text x="620" y="296" text-anchor="middle" fill="#6a1b9a" font-size="7">Alert state · monitoring UI</text>
+
+
+  <!-- ── C4: Krateo Frontend (consumer side) + SSE Proxy ───────────── -->
+  <rect x="756" y="46" width="216" height="100" rx="8" fill="url(#gF)" stroke="#2e7d32" stroke-width="2" filter="url(#sh)"/>
+  <text x="864" y="68" text-anchor="middle" fill="#1b5e20" font-size="11" font-weight="700">Krateo Frontend</text>
+  <text x="864" y="82" text-anchor="middle" fill="#2e7d32" font-size="8">Composition Page (consumer side)</text>
+  <line x1="770" y1="90" x2="958" y2="90" stroke="#2e7d32" stroke-width="0.5" opacity="0.3"/>
+
+  <rect x="768" y="98" width="90" height="34" rx="4" fill="#fff" stroke="#2e7d32" stroke-width="1" opacity="0.9"/>
+  <text x="813" y="113" text-anchor="middle" fill="#1b5e20" font-size="9" font-weight="500">RESTAction</text>
+  <text x="813" y="126" text-anchor="middle" fill="#2e7d32" font-size="7">GET /events</text>
+
+  <rect x="868" y="98" width="90" height="34" rx="4" fill="#fff" stroke="#2e7d32" stroke-width="1" opacity="0.9"/>
+  <text x="913" y="113" text-anchor="middle" fill="#1b5e20" font-size="9" font-weight="500">EventList</text>
+  <text x="913" y="126" text-anchor="middle" fill="#2e7d32" font-size="7">SSE real-time</text>
+
+  <!-- SSE Proxy -->
+  <rect x="756" y="164" width="216" height="80" rx="8" fill="url(#gF)" stroke="#2e7d32" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="864" y="186" text-anchor="middle" fill="#1b5e20" font-size="10" font-weight="600">krateo-sse-proxy</text>
+  <text x="864" y="200" text-anchor="middle" fill="#2e7d32" font-size="8">:8080</text>
+  <line x1="770" y1="208" x2="958" y2="208" stroke="#2e7d32" stroke-width="0.5" opacity="0.3"/>
+  <text x="864" y="222" text-anchor="middle" fill="#33691e" font-size="8">Polls ClickHouse every 3s</text>
+  <text x="864" y="234" text-anchor="middle" fill="#33691e" font-size="8">SSE /notifications/ + REST /events</text>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <!-- ROW 1 ARROWS                                                      -->
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+
+  <!-- Krateo + K8s → OTel (horizontal) -->
+  <line x1="240" y1="100" x2="276" y2="100" stroke="#1565c0" stroke-width="1.5" marker-end="url(#arr-b)" stroke-dasharray="4,3"/>
+  <line x1="240" y1="166" x2="276" y2="166" stroke="#1565c0" stroke-width="1.5" marker-end="url(#arr-b)" stroke-dasharray="4,3"/>
+  <line x1="240" y1="226" x2="276" y2="226" stroke="#1565c0" stroke-width="1.5" marker-end="url(#arr-b)" stroke-dasharray="4,3"/>
+  <line x1="240" y1="295" x2="262" y2="295" stroke="#3f51b5" stroke-width="1.2" marker-end="url(#arr-b)" stroke-dasharray="4,3"/>
+  <!-- K8s workloads arrow joins OTel area -->
+  <path d="M262,295 L262,250 L276,250" stroke="#3f51b5" stroke-width="1.2" fill="none" marker-end="url(#arr-b)" stroke-dasharray="4,3"/>
+
+  <!-- OTel → ClickHouse (horizontal) -->
+  <line x1="474" y1="100" x2="526" y2="112" stroke="#e65100" stroke-width="1.5" marker-end="url(#arr-o)"/>
+  <line x1="474" y1="166" x2="526" y2="142" stroke="#e65100" stroke-width="1.5" marker-end="url(#arr-o)"/>
+  <line x1="474" y1="230" x2="526" y2="172" stroke="#e65100" stroke-width="1.5" marker-end="url(#arr-o)"/>
+
+  <!-- ClickHouse → SSE Proxy (horizontal) -->
+  <line x1="728" y1="204" x2="754" y2="204" stroke="#2e7d32" stroke-width="1.5" marker-end="url(#arr-g)"/>
+  <text x="741" y="196" text-anchor="middle" fill="#2e7d32" font-size="7">poll</text>
+
+  <!-- ClickHouse → Frontend RESTAction -->
+  <path d="M728,112 L766,112" stroke="#2e7d32" stroke-width="1.5" fill="none" marker-end="url(#arr-g)"/>
+  <text x="747" y="106" text-anchor="middle" fill="#2e7d32" font-size="7">REST</text>
+
+  <!-- SSE Proxy → EventList -->
+  <path d="M913,164 L913,134" stroke="#2e7d32" stroke-width="1.5" fill="none" marker-end="url(#arr-g)"/>
+  <text x="924" y="152" fill="#2e7d32" font-size="7">SSE</text>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <!-- ROW 2 — ALERTING  (y: 350–510)                                    -->
+  <!--   C3: HyperDX alert   C4: Slack (EXTERNAL)   C4b: KAgent          -->
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+
+  <!-- C3: HyperDX Alert Details -->
+  <rect x="512" y="350" width="216" height="90" rx="8" fill="url(#gA)" stroke="#6a1b9a" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="620" y="374" text-anchor="middle" fill="#4a148c" font-size="11" font-weight="600">HyperDX Alerts</text>
+  <text x="620" y="390" text-anchor="middle" fill="#6a1b9a" font-size="8">Monitors otel_logs</text>
+  <line x1="528" y1="398" x2="712" y2="398" stroke="#6a1b9a" stroke-width="0.5" opacity="0.3"/>
+  <text x="620" y="414" text-anchor="middle" fill="#5d4037" font-size="8">Pod restart detection</text>
+  <text x="620" y="428" text-anchor="middle" fill="#5d4037" font-size="8">Killing / BackOff / Unhealthy / Failed</text>
+
+  <!-- SLACK — EXTERNAL (outside cluster conceptually, shown with different border) -->
+  <rect x="756" y="350" width="216" height="90" rx="8" fill="url(#gS)" stroke="#4e342e" stroke-width="2" filter="url(#sh)" stroke-dasharray="6,3"/>
+  <text x="864" y="370" text-anchor="middle" fill="#3e2723" font-size="12" font-weight="700">Slack</text>
+  <text x="864" y="384" text-anchor="middle" fill="#795548" font-size="7" font-style="italic">EXTERNAL SERVICE</text>
+  <text x="864" y="400" text-anchor="middle" fill="#4e342e" font-size="8">#krateo-troubleshooting</text>
+  <line x1="770" y1="408" x2="958" y2="408" stroke="#4e342e" stroke-width="0.5" opacity="0.3"/>
+  <text x="864" y="424" text-anchor="middle" fill="#5d4037" font-size="8">Alert + Resolution webhooks</text>
+
+  <!-- KAgent -->
+  <rect x="756" y="460" width="216" height="54" rx="8" fill="url(#gS)" stroke="#4e342e" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="864" y="484" text-anchor="middle" fill="#3e2723" font-size="10" font-weight="600">KAgent Slack Bot</text>
+  <text x="864" y="500" text-anchor="middle" fill="#5d4037" font-size="8">Routes alerts to Krateo Autopilot</text>
+
+
+  <!-- ═══ ROW 2 ARROWS ════════════════════════════════════════════════ -->
+
+  <!-- ClickHouse → HyperDX Alerts (vertical) -->
+  <line x1="620" y1="318" x2="620" y2="348" stroke="#6a1b9a" stroke-width="1.5" marker-end="url(#arr-p)"/>
+  <text x="636" y="338" fill="#6a1b9a" font-size="7">query 1m</text>
+
+  <!-- HyperDX → Slack (horizontal) -->
+  <line x1="728" y1="395" x2="754" y2="395" stroke="#6a1b9a" stroke-width="1.5" marker-end="url(#arr-p)"/>
+  <text x="741" y="388" text-anchor="middle" fill="#6a1b9a" font-size="7">webhook</text>
+
+  <!-- Slack → KAgent (vertical) -->
+  <line x1="864" y1="440" x2="864" y2="458" stroke="#4e342e" stroke-width="1.5" marker-end="url(#arr-br)"/>
+  <text x="878" y="452" fill="#4e342e" font-size="7">@mention</text>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <!-- ROW 3 — AI AGENTS  (y: 550–720)                                   -->
+  <!--   C2: MCP Server    C3+C4: Krateo Autopilot                       -->
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+
+  <!-- C2: ClickHouse MCP Server -->
+  <rect x="268" y="560" width="216" height="110" rx="8" fill="url(#gM)" stroke="#006064" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="376" y="584" text-anchor="middle" fill="#004d40" font-size="10" font-weight="600">ClickHouse MCP Server</text>
+  <text x="376" y="600" text-anchor="middle" fill="#006064" font-size="8">:8000  (SSE transport)</text>
+  <line x1="284" y1="608" x2="468" y2="608" stroke="#006064" stroke-width="0.5" opacity="0.3"/>
+  <text x="376" y="624" text-anchor="middle" fill="#37474f" font-size="8">list_databases</text>
+  <text x="376" y="638" text-anchor="middle" fill="#37474f" font-size="8">list_tables</text>
+  <text x="376" y="652" text-anchor="middle" fill="#37474f" font-size="8">run_select_query</text>
+
+  <!-- C3+C4: Krateo Autopilot -->
+  <rect x="512" y="540" width="460" height="140" rx="10" fill="url(#gAg)" stroke="#f57f17" stroke-width="2" filter="url(#sh)"/>
+  <text x="742" y="564" text-anchor="middle" fill="#e65100" font-size="12" font-weight="700">Krateo Autopilot</text>
+  <text x="742" y="580" text-anchor="middle" fill="#f57f17" font-size="8">(coordinator)</text>
+  <line x1="528" y1="588" x2="956" y2="588" stroke="#f57f17" stroke-width="0.5" opacity="0.3"/>
+
+  <!-- Three agents in a row -->
+  <rect x="530" y="598" width="136" height="36" rx="5" fill="#fff" stroke="#f57f17" stroke-width="1" opacity="0.9"/>
+  <text x="598" y="614" text-anchor="middle" fill="#e65100" font-size="9" font-weight="500">Observability Agent</text>
+  <text x="598" y="628" text-anchor="middle" fill="#5d4037" font-size="7">diagnosis via CH MCP</text>
+
+  <rect x="678" y="598" width="136" height="36" rx="5" fill="#fff" stroke="#f57f17" stroke-width="1" opacity="0.9"/>
+  <text x="746" y="614" text-anchor="middle" fill="#e65100" font-size="9" font-weight="500">k8s-agent</text>
+  <text x="746" y="628" text-anchor="middle" fill="#5d4037" font-size="7">remediation</text>
+
+  <rect x="826" y="598" width="136" height="36" rx="5" fill="#fff" stroke="#f57f17" stroke-width="1" opacity="0.9"/>
+  <text x="894" y="614" text-anchor="middle" fill="#e65100" font-size="9" font-weight="500">helm-agent</text>
+  <text x="894" y="628" text-anchor="middle" fill="#5d4037" font-size="7">Helm ops</text>
+
+  <rect x="530" y="642" width="432" height="26" rx="4" fill="#fff3e0" stroke="#f57f17" stroke-width="0.5" opacity="0.6"/>
+  <text x="746" y="660" text-anchor="middle" fill="#5d4037" font-size="8">Agents coordinate diagnosis, remediation, and Helm troubleshooting</text>
+
+
+  <!-- ═══ ROW 3 ARROWS ════════════════════════════════════════════════ -->
+
+  <!-- KAgent → Autopilot (vertical) -->
+  <line x1="864" y1="514" x2="864" y2="538" stroke="#4e342e" stroke-width="1.5" marker-end="url(#arr-br)"/>
+  <text x="878" y="530" fill="#4e342e" font-size="7">routes to</text>
+
+  <!-- Observability Agent → MCP (horizontal left) -->
+  <line x1="530" y1="614" x2="486" y2="614" stroke="#00695c" stroke-width="1.5" marker-end="url(#arr-t)"/>
+  <text x="508" y="606" text-anchor="middle" fill="#00695c" font-size="7">MCP tools</text>
+
+  <!-- MCP → ClickHouse (route right, below Autopilot, up right margin, across top, down into CH) -->
+  <path d="M376,670 L376,696 L1076,696 L1076,30 L620,30 L620,44" stroke="#00695c" stroke-width="1.5" fill="none" marker-end="url(#arr-t)"/>
+  <text x="1070" y="400" fill="#00695c" font-size="7" text-anchor="end">queries</text>
+
+  <!-- Autopilot → Slack (reports back, dashed upward) -->
+  <path d="M952,560 L952,442" stroke="#ef6c00" stroke-width="1.5" fill="none" marker-end="url(#arr-ao)" stroke-dasharray="5,3"/>
+  <text x="958" y="500" fill="#ef6c00" font-size="7">reports</text>
+  <text x="958" y="510" fill="#ef6c00" font-size="7">back</text>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  <!-- LEGEND  (C1, R2)                                                  -->
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+
+  <rect x="20" y="350" width="220" height="196" rx="8" fill="#fff" stroke="#ddd" stroke-width="1" filter="url(#sh)"/>
+  <text x="130" y="370" text-anchor="middle" fill="#333" font-size="10" font-weight="600">Legend</text>
+  <line x1="36" y1="378" x2="224" y2="378" stroke="#ddd" stroke-width="0.5"/>
+
+  <rect x="36" y="388" width="12" height="12" rx="3" fill="url(#gK)" stroke="#1565c0" stroke-width="1"/>
+  <text x="54" y="399" fill="#444" font-size="8">Krateo Components</text>
+  <rect x="140" y="388" width="12" height="12" rx="3" fill="url(#gW)" stroke="#3f51b5" stroke-width="1"/>
+  <text x="158" y="399" fill="#444" font-size="8">K8s Workloads</text>
+
+  <rect x="36" y="406" width="12" height="12" rx="3" fill="url(#gO)" stroke="#e65100" stroke-width="1"/>
+  <text x="54" y="417" fill="#444" font-size="8">OTel Collectors</text>
+  <rect x="140" y="406" width="12" height="12" rx="3" fill="url(#gC)" stroke="#b71c1c" stroke-width="1"/>
+  <text x="158" y="417" fill="#444" font-size="8">ClickHouse</text>
+
+  <rect x="36" y="424" width="12" height="12" rx="3" fill="url(#gF)" stroke="#2e7d32" stroke-width="1"/>
+  <text x="54" y="435" fill="#444" font-size="8">Frontend / SSE</text>
+  <rect x="140" y="424" width="12" height="12" rx="3" fill="url(#gA)" stroke="#6a1b9a" stroke-width="1"/>
+  <text x="158" y="435" fill="#444" font-size="8">Alerting</text>
+
+  <rect x="36" y="442" width="12" height="12" rx="3" fill="url(#gS)" stroke="#4e342e" stroke-width="1"/>
+  <text x="54" y="453" fill="#444" font-size="8">Slack / KAgent</text>
+  <rect x="140" y="442" width="12" height="12" rx="3" fill="url(#gAg)" stroke="#f57f17" stroke-width="1"/>
+  <text x="158" y="453" fill="#444" font-size="8">Krateo Autopilot</text>
+
+  <rect x="36" y="460" width="12" height="12" rx="3" fill="url(#gM)" stroke="#006064" stroke-width="1"/>
+  <text x="54" y="471" fill="#444" font-size="8">CH MCP Server</text>
+
+  <line x1="36" y1="480" x2="224" y2="480" stroke="#ddd" stroke-width="0.5"/>
+  <line x1="36" y1="496" x2="66" y2="496" stroke="#666" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="74" y="500" fill="#444" font-size="8">Data flow</text>
+  <line x1="140" y1="496" x2="170" y2="496" stroke="#666" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="178" y="500" fill="#444" font-size="8">Signal / async</text>
+  <line x1="36" y1="514" x2="66" y2="514" stroke="#90a4ae" stroke-width="1.5" stroke-dasharray="8,4"/>
+  <text x="74" y="518" fill="#444" font-size="8">K8s cluster boundary</text>
+  <line x1="140" y1="514" x2="170" y2="514" stroke="#4e342e" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="178" y="518" fill="#444" font-size="8">External service</text>
+
+
+  <!-- ═══ ROW LABELS (right margin) ══════════════════════════════════ -->
+  <text x="1088" y="180" text-anchor="end" fill="#aaa" font-size="8" font-style="italic" transform="rotate(-90, 1088, 180)">DATA PIPELINE</text>
+  <text x="1088" y="420" text-anchor="end" fill="#aaa" font-size="8" font-style="italic" transform="rotate(-90, 1088, 420)">ALERTING</text>
+  <text x="1088" y="630" text-anchor="end" fill="#aaa" font-size="8" font-style="italic" transform="rotate(-90, 1088, 630)">AI AGENTS</text>
+
+</svg>
+</body>
+</html>
