@@ -65,7 +65,7 @@ config:
           namespaces: []
 
     k8s_cluster:
-      collection_interval: 30s
+      collection_interval: 60s
       node_conditions_to_report: [Ready, MemoryPressure, DiskPressure, PIDPressure]
       allocatable_types_to_report: [cpu, memory, ephemeral-storage]
 
@@ -144,7 +144,10 @@ config:
         receivers: [k8sobjects]
         processors: [memory_limiter, k8sattributes, resource, compositionresolver, batch]
         exporters: [clickhouse]
-      metrics: null
+      metrics:
+        receivers: [k8s_cluster]
+        processors: [memory_limiter, batch]
+        exporters: [clickhouse]
       traces: null
 
 resources:

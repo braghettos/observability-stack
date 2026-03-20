@@ -4,47 +4,30 @@ Replaces the `eventrouter` + `eventsse` + `etcd` stack with a ClickHouse-based o
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Kubernetes Cluster                         │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ OpenTelemetry Collectors                                │   │
-│  │   DaemonSet  → pod logs, node metrics, kubelet metrics  │   │
-│  │   Deployment → K8s events, cluster metrics              │   │
-│  │   App Pods   → traces (OTLP)                            │   │
-│  └────────────────────┬────────────────────────────────────┘   │
-│                       │ OTLP/HTTP :4318                         │
-│  ┌────────────────────▼────────────────────────────────────┐   │
-│  │ ClickStack (ClickHouse + OTel Gateway + HyperDX)        │   │
-│  │   otel_logs     ← pod logs + K8s events                 │   │
-│  │   otel_traces   ← application traces                    │   │
-│  │   otel_metrics* ← node, cluster, app metrics            │   │
-│  └──────────┬──────────────────────────────────────────────┘   │
-│             │                                                   │
-│    ┌────────┴──────────────────────────────────┐               │
-│    │ predefined_query_handler                  │               │
-│    │  GET /events/{compositionId}              │               │
-│    │  → returns SSEK8sEvent rows (FORMAT JSON) │               │
-│    └────────┬──────────────────────────────────┘               │
-│             │                  │ poll every 3s                  │
-│    ┌────────▼─────────┐  ┌────▼────────────────────────────┐   │
-│    │ Krateo RESTAction│  │ krateo-sse-proxy                │   │
-│    │ (initial events) │  │  /notifications/ – SSE push     │   │
-│    └──────────────────┘  └────────────────────────────────┘   │
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │ ClickHouse MCP Server                                    │  │
-│  │  list_databases / list_tables / run_select_query         │  │
-│  │  → connects any MCP-compatible AI agent to ClickHouse    │  │
-│  └──────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-```
+See the full architecture diagram: **[docs/architecture.md](docs/architecture.md)** (Mermaid) or **[docs/architecture.html](docs/architecture.html)** (interactive SVG).
+
+### Components Overview
+
+| Layer | Component | Role |
+|-------|-----------|------|
+| **Krateo Platform** | Frontend + Snowplow, Composition Dynamic Ctrl, Core Provider, AuthN/AuthZ, Providers (Helm, GitHub, …) | Platform services producing logs, events, traces, metrics |
+| **Collection** | OTel DaemonSet (per-node) | Pod logs, node metrics, kubelet stats via filelog, hostmetrics, kubeletstats |
+| **Collection** | OTel Deployment (cluster-level) | K8s events via k8sobjects, cluster metrics via k8s_cluster, enriches with `krateo.io/composition-id` via compositionresolver |
+| **Collection** | OTel Gateway (ClickStack) | OTLP/HTTP :4318 traces from instrumented apps |
+| **Storage** | ClickHouse | `otel_logs`, `otel_traces`, `otel_metrics` tables; `/events` predefined query handler |
+| **Frontend** | krateo-sse-proxy | Polls ClickHouse every 3s, serves SSE `/notifications/` and REST `/events` |
+| **Alerting** | HyperDX | Monitors `otel_logs`, fires alert/resolution webhooks to Slack `#krateo-troubleshooting` |
+| **AI Agents** | Krateo Autopilot | Observability Agent (diagnosis via ClickHouse MCP), k8s-agent (remediation), helm-agent (Helm ops) |
+| **AI Agents** | KAgent Slack Bot | Receives @mentions from Slack alerts, routes to Krateo Autopilot |
+| **AI Agents** | ClickHouse MCP Server | :8000, tools: `list_databases`, `list_tables`, `run_select_query` |
 
 ## Directory Layout
 
 ```
 clickhouse-observability/
+├── docs/
+│   ├── architecture.md           # Architecture diagram (Mermaid, GitHub-renderable)
+│   └── architecture.html         # Architecture diagram (interactive SVG)
 ├── clickstack/
 │   └── values.yaml               # ClickStack Helm values
 ├── otel-collectors/
