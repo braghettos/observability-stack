@@ -123,7 +123,7 @@ config:
 
   exporters:
     clickhouse:
-      endpoint: "tcp://krateo-clickstack-clickhouse.clickhouse-system.svc:9000"
+      endpoint: "tcp://krateo-clickstack-clickhouse-clickhouse-headless.clickhouse-system.svc:9000"
       username: otelcollector
       password: otelcollectorpass
       database: default

@@ -1,7 +1,5 @@
 # Deep Study: What Happens When an Alert Resolves (ClickHouse + HyperDX)
 
-> For the full system architecture, see [architecture.md](architecture.md) or [architecture.html](architecture.html).
-
 ## Executive Summary
 
 **ClickHouse does not store or manage alert state.** It is a passive data store. When an alert resolves:

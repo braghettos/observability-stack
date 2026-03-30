@@ -38,7 +38,7 @@ spec:
           env:
             # ClickHouse connection – host WITHOUT protocol prefix (interface controlled by CLICKHOUSE_SECURE)
             - name: CLICKHOUSE_HOST
-              value: "krateo-clickstack-clickhouse.clickhouse-system.svc"
+              value: "krateo-clickstack-clickhouse-clickhouse-headless.clickhouse-system.svc"
             - name: CLICKHOUSE_PORT
               value: "8123"
             - name: CLICKHOUSE_SECURE

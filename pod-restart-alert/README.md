@@ -62,9 +62,12 @@ The alert detects pod-related K8s events with these reasons:
 ```sql
 ResourceAttributes['telemetry.source'] = 'k8s-events'
 AND JSONExtractString(Body, 'object', 'involvedObject', 'kind') = 'Pod'
-AND JSONExtractString(Body, 'object', 'reason') IN ('Killing', 'BackOff', 'Unhealthy', 'Failed')
+AND JSONExtractString(Body, 'object', 'type') = 'Warning'
 ```
 
+> **Why `type = 'Warning'` instead of filtering by specific reasons?** Pods can restart for many reasons beyond CrashLoopBackOff — OOMKill, eviction, preemption, failed mounts, scheduling failures, probe failures, etc. Filtering by `type = 'Warning'` catches all abnormal pod events regardless of the specific reason.
+
+>>>>>>> afbdc4d (fix: broaden pod restart alert to catch all Warning events)
 3. Save the search (e.g. "Pod Restart Events")
 
 ### Step 3: Add Alert to the Saved Search

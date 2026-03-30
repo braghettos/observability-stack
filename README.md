@@ -45,9 +45,14 @@ clickhouse-observability/
 │       └── deployment.yaml       # K8s Deployment + Service for SSE proxy
 ├── mcp-server/
 │   └── deployment.yaml           # ClickHouse MCP Server Deployment + Service
+├── pod-restart-alert/
+│   ├── README.md                 # HyperDX UI workflow for pod restart alerts
+│   └── bootstrap-alert.sh        # Optional: create alert via HyperDX API
 ├── blueprint-templates/
 │   ├── restaction.composition-events.yaml          # Updated RESTAction template
 │   └── eventlist.composition-events-panel-eventlist.yaml  # EventList (unchanged)
+├── docs/
+│   └── ALERT_RESOLUTION_DEEP_DIVE.md   # ClickHouse + HyperDX alert resolution flow
 ├── install.sh                    # End-to-end install script
 └── README.md
 ```
@@ -147,6 +152,16 @@ kubectl apply -f sse-proxy/deploy/deployment.yaml
 ```bash
 kubectl apply -f mcp-server/deployment.yaml
 ```
+
+### Phase 7 – Pod Restart Alert (optional)
+
+Create a pod restart alert in the HyperDX UI. Alerts fire when pod restart events (Killing, BackOff, Unhealthy, Failed) exceed a threshold and post to Slack. Target channel: `#krateo-troubleshooting` in workspace `aiagents-gruppo`.
+
+See [pod-restart-alert/README.md](pod-restart-alert/README.md) for full step-by-step instructions (create Slack webhook in HyperDX, saved search, alert).
+
+To have the Krateo Observability Agent react to alerts, add the KAgent Slack bot to `#krateo-troubleshooting`. See the Krateo Autopilot repo: `manifests/slack-integration/README.md`.
+
+For a deep study of what happens when an alert fires vs. resolves (ClickHouse vs. HyperDX roles), see [docs/ALERT_RESOLUTION_DEEP_DIVE.md](docs/ALERT_RESOLUTION_DEEP_DIVE.md).
 
 **Access from Cursor (local):**
 ```bash
