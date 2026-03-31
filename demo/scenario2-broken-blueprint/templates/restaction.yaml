@@ -1,0 +1,14 @@
+apiVersion: templates.krateo.io/v1
+kind: RESTAction
+metadata:
+  name: {{ .Values.appName }}-data
+  namespace: {{ .Release.Namespace }}
+spec:
+  api:
+    - name: getData
+      path: "/data"
+      verb: GET
+      endpointRef:
+        name: {{ .Values.appName }}-endpoint
+        namespace: {{ .Release.Namespace }}
+      jqFilter: ".items"

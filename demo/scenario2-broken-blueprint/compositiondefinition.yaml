@@ -1,0 +1,15 @@
+apiVersion: core.krateo.io/v1alpha1
+kind: CompositionDefinition
+metadata:
+  name: demo-broken-blueprint
+  namespace: krateo-system
+spec:
+  chart:
+    url: oci://ghcr.io/braghettos/demo-broken-blueprint
+    version: "0.2.0"
+    credentials:
+      username: braghettos
+      passwordRef:
+        name: ghcr-chart-pull
+        namespace: krateo-system
+        key: password

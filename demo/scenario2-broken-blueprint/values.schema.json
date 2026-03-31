@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "appName": {
+      "type": "string",
+      "default": "demo-broken"
+    },
+    "endpointUrl": {
+      "type": "string",
+      "default": "http://nonexistent-service:9999/api/data"
+    }
+  }
+}

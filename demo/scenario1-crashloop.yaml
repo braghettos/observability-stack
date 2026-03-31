@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo-crashloop
+  namespace: default
+  labels:
+    app: demo-crashloop
+    scenario: observability-demo
+spec:
+  containers:
+    - name: crash
+      image: busybox
+      command: ["sh", "-c", "echo 'Starting demo app...'; sleep 2; echo 'FATAL: unhandled exception in main loop'; exit 1"]
+      resources:
+        limits:
+          cpu: 10m
+          memory: 16Mi
