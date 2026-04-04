@@ -53,16 +53,29 @@ Always include in your response:
 
 ## Runbooks
 
-Before ad-hoc diagnosis, check for matching runbooks. Runbooks are stored as Kubernetes ConfigMaps in krateo-system with label `krateo.io/runbook: "true"`. Use `k8s_get_resources` to list them.
+Before ad-hoc diagnosis, check the runbooks below for a matching playbook. Each runbook specifies trigger conditions, diagnosis queries, remediation steps, and verification criteria.
 
-Each runbook contains:
-- `trigger`: alert name pattern or error pattern to match
-- `severity`: default severity classification
-- `diagnosis_query`: ClickHouse query to gather context
-- `remediation`: action type (search-github-and-open-pr, restart-pod, scale-up, etc.)
-- `escalation`: who to notify if auto-remediation fails
+If a runbook matches the incident, follow its steps. If no runbook matches, fall back to the diagnosis → classification → action workflow above.
 
-If a runbook matches, follow its steps. If not, fall back to the diagnosis → classification → action workflow above.
+---
+
+{{include "runbooks/oomkill"}}
+
+---
+
+{{include "runbooks/helm_failure"}}
+
+---
+
+{{include "runbooks/restaction_failure"}}
+
+---
+
+{{include "runbooks/composition_failure"}}
+
+---
+
+{{include "runbooks/infra_self_healing"}}
 
 ## SLO/SLI Monitoring
 
@@ -99,15 +112,3 @@ Never report "Fixed" without verification. If you cannot verify (e.g., the obser
 
 Alerts may arrive through the autopilot-alert-proxy, which deduplicates alerts within a 5-minute window. If you receive an alert that mentions "deduplicated" or "storm", treat it as potentially representing multiple related failures. Query the observability agent for the full scope before acting.
 
-### Runbook-as-Code
-
-Runbooks are available as YAML files in the cluster. When processing an alert:
-1. Check if a matching runbook exists (by alert reason/type)
-2. If a runbook matches, follow its steps for deterministic resolution
-3. If no runbook matches, fall back to the diagnosis → classification → action workflow
-
-Available runbooks:
-- **oomkill-remediation**: OOMKilled pods — diagnose memory usage, adjust limits
-- **helm-release-failure**: Failed Helm releases — inspect, rollback
-- **infra-self-healing**: Observability component failures — restart, check deps
-- **alert-storm-suppression**: >10 alerts in 5 min — correlate, suppress, escalate

@@ -17,6 +17,12 @@
 #      the full response to the caller. Keep stream:true on krateo-autopilot
 #      (user-facing, needs streaming UX).
 #
+#   3. Deploy krateo-runbooks ConfigMap and wire it into krateo-sre-agent
+#      via promptTemplate.dataSources. The SRE agent's system prompt uses
+#      {{include "runbooks/<name>"}} to embed each runbook at load time.
+#      5 runbooks included: oomkill, helm_failure, restaction_failure,
+#      composition_failure, infra_self_healing.
+#
 # Usage:
 #   ./apply-overrides.sh
 #
@@ -87,7 +93,41 @@ for agent in "${SUB_AGENTS[@]}"; do
 done
 
 # ---------------------------------------------------------------------------
-# 3. Restart affected deployments to pick up new prompts
+# 3. Deploy krateo-runbooks ConfigMap and wire into SRE agent
+# ---------------------------------------------------------------------------
+log "Deploying krateo-runbooks ConfigMap..."
+
+RUNBOOKS_DIR="$SCRIPT_DIR/../runbooks/markdown"
+if [ ! -d "$RUNBOOKS_DIR" ]; then
+  die "Runbooks directory not found: $RUNBOOKS_DIR"
+fi
+
+kubectl create configmap krateo-runbooks \
+  --from-file=oomkill="$RUNBOOKS_DIR/oomkill.md" \
+  --from-file=helm_failure="$RUNBOOKS_DIR/helm_failure.md" \
+  --from-file=restaction_failure="$RUNBOOKS_DIR/restaction_failure.md" \
+  --from-file=composition_failure="$RUNBOOKS_DIR/composition_failure.md" \
+  --from-file=infra_self_healing="$RUNBOOKS_DIR/infra_self_healing.md" \
+  --namespace "$NS" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+log "Wiring runbooks dataSource into krateo-sre-agent..."
+
+# Idempotent patch: only add if not already present
+CURRENT=$(kubectl get agent krateo-sre-agent -n "$NS" \
+  -o jsonpath='{.spec.declarative.promptTemplate.dataSources[?(@.alias=="runbooks")].alias}' 2>/dev/null)
+if [ "$CURRENT" != "runbooks" ]; then
+  kubectl patch agent krateo-sre-agent -n "$NS" --type=json -p '[{
+    "op": "add",
+    "path": "/spec/declarative/promptTemplate/dataSources/-",
+    "value": {"alias": "runbooks", "kind": "ConfigMap", "name": "krateo-runbooks"}
+  }]' 2>&1 | sed "s/^/  /"
+else
+  log "  runbooks dataSource already present"
+fi
+
+# ---------------------------------------------------------------------------
+# 4. Restart affected deployments to pick up new prompts
 # ---------------------------------------------------------------------------
 log "Restarting agent deployments..."
 

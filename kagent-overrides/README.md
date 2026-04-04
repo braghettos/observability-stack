@@ -41,6 +41,15 @@ agent to confirm the fix worked before declaring resolution. The
 `observability_agent` prompt gained a VERIFICATION MODE section explaining
 how to run the verification query.
 
+### 4. Runbooks wired as kagent dataSource
+
+The `krateo-sre-agent` gets a second `promptTemplate.dataSources` entry
+pointing at a `krateo-runbooks` ConfigMap packed from `../runbooks/markdown/`.
+The SRE system prompt embeds each runbook via `{{include "runbooks/<name>"}}`
+— they're loaded into the system prompt at agent-load time by kagent's
+template engine. No runtime lookup, no custom tool calls. 5 runbooks:
+oomkill, helm_failure, restaction_failure, composition_failure, infra_self_healing.
+
 ## Files
 
 | File | Description |
