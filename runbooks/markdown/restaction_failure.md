@@ -1,95 +1,99 @@
-# Runbook: RESTAction / Widget Configuration Failure
+# Runbook: RESTAction Configuration Failure
 
 ## Trigger
-Snowplow error logs matching one of these patterns:
-- `unable to resolve api endpoint reference` → endpoint-missing (Secret not found)
-- `api call response failure` → endpoint-unreachable (DNS, connection refused, 4xx, 5xx)
-- `unable to resolve filter` → bad-jq-filter (jq syntax error)
-- `unable to resolve api reference` → widget-missing-restaction
-- `unable to resolve widgetDataTemplate` → widget-template-error
-- `unable to resolve widget` → widget-error-generic (schema validation)
-- `api not found in apiMap` → broken-dependency (dependsOn chain)
+Snowplow error logs matching one of these RESTAction-specific patterns:
+- `unable to resolve api endpoint reference` → **endpoint-missing** (Secret not found)
+- `api call response failure` → **endpoint-unreachable** (DNS, connection refused, 4xx, 5xx)
+- `api call response failure` + 401/403 → **restaction-auth-failed**
+- `unable to resolve filter` → **bad-jq-filter** (jq syntax error in top-level filter)
+- `api not found in apiMap` → **broken-dependency** (dependsOn chain broken)
+
+> **Widget resolution errors** (`unable to resolve widget`, `unable to resolve api reference`,
+> `unable to resolve widgetDataTemplate`) are covered by the `widget_failure` runbook.
 
 ## Severity
-P3 (Portal UI degraded but platform healthy)
+P3 (portal pages degraded, platform healthy)
 
-## Diagnosis
+## Primary Specialist
+**krateo_restaction_agent**
 
-### Step 1 — Identify the failing RESTAction/Widget
+## Diagnosis (via krateo_observability_agent)
+
+### Step 1 — Identify the failing RESTAction
 ```sql
 SELECT toString(Timestamp) AS ts,
        JSONExtractString(Body, 'msg') AS msg,
-       JSONExtractString(Body, 'name') AS resource_name,
-       JSONExtractString(Body, 'namespace') AS resource_ns,
+       JSONExtractString(Body, 'name') AS api_name,
+       JSONExtractString(Body, 'namespace') AS ns,
+       JSONExtractString(Body, 'host') AS host,
+       JSONExtractString(Body, 'path') AS path,
        JSONExtractString(Body, 'error') AS error_detail,
        JSONExtractString(Body, 'traceId') AS trace_id
 FROM otel_logs
 WHERE ResourceAttributes['k8s.pod.name'] LIKE 'snowplow-%'
-  AND (Body LIKE '%unable to resolve%' OR Body LIKE '%api call response failure%')
+  AND (Body LIKE '%unable to resolve api endpoint reference%'
+       OR Body LIKE '%api call response failure%'
+       OR Body LIKE '%unable to resolve filter%'
+       OR Body LIKE '%api not found in apiMap%')
   AND Timestamp > now() - INTERVAL 30 MINUTE
 ORDER BY Timestamp DESC LIMIT 20
 ```
 
-### Step 2 — Classify the error
-Match the log `msg` against the patterns above to determine the error class.
+### Step 2 — Classify
+Match the `msg` field against the patterns above.
 
-## Decision Tree by Error Class
+## Decision Tree
 
-### endpoint-missing
+### endpoint-missing (`unable to resolve api endpoint reference`)
 **Cause:** RESTAction references an `endpointRef.name` Secret that doesn't exist.
 **Diagnose:**
 ```
-k8s_get_resources: secret <endpointRef.name> in namespace <resource_ns>
+k8s_get_resources: secret <endpointRef.name> -n <ns>
 ```
-**Remediate (via krateo_restaction_agent):** Create the missing Secret with the
-correct `server-url` and auth fields, OR fix the RESTAction to reference an
-existing Secret.
-**Hint:** Secrets must be in the SAME namespace as the RESTAction.
+**Remediate (via krateo_restaction_agent):** Create the missing Secret with
+the correct `server-url` and auth fields, OR fix the RESTAction to reference
+an existing Secret.
+**Hint:** The Secret MUST live in the same namespace as the RESTAction.
 
-### endpoint-unreachable
+### endpoint-unreachable (`api call response failure`)
 **Cause:** Target API is down, DNS resolution failed, or URL is wrong.
+The `error` field contains details: "connection refused", "no such host",
+"Client.Timeout", or HTTP status text.
 **Diagnose:**
-- Extract `host` and `path` from the log
-- Run test curl from inside the cluster
-**Remediate (via k8s_agent):** If target service is down, restart/scale it. If
-URL is wrong, update the Secret with correct server-url.
+- Extract `host` and `path` from the log attrs.
+- Curl from inside the cluster:
+  ```
+  kubectl run curl --rm -it --image=curlimages/curl -- <host><path>
+  ```
+- Check NetworkPolicies and DNS resolution.
+**Remediate:** If the target service is down → delegate to `k8s_agent`. If
+the URL is wrong → update the Secret's `server-url`.
 
 ### restaction-auth-failed (401/403 inside endpoint-unreachable)
-**Cause:** Auth token expired, wrong credentials, or missing permissions.
-**Remediate:** Rotate the Secret credentials. If using ServiceAccount token,
-check RBAC.
+**Cause:** Auth token expired, wrong credentials, or missing permissions on
+the target API.
+**Diagnose:** Inspect the Secret's token/username/password keys.
+**Remediate:** Rotate credentials in the Secret. If using a ServiceAccount
+token, check RBAC on the target API.
 
-### bad-jq-filter
-**Cause:** `spec.filter` jq expression has syntax error or references undefined fields.
-**Diagnose:** Extract the filter expression from the RESTAction CR, test locally:
+### bad-jq-filter (`unable to resolve filter`)
+**Cause:** The RESTAction's top-level `spec.filter` jq expression has syntax
+error or references undefined fields in the aggregated api dict.
+**Diagnose:** Read the RESTAction's `spec.filter`. Get a sample of what the
+api returns and test locally:
 ```
-echo '<sample-json>' | jq -c '<filter>'
+echo '<sample-api-response>' | jq -c '<filter>'
 ```
-**Remediate (via krateo_restaction_agent):** Fix the jq filter syntax.
-**Hint:** Snowplow uses gojq — avoid unsupported builtins.
+**Remediate (via krateo_restaction_agent):** Fix the jq filter.
+**Hint:** Snowplow uses gojq — some jq builtins are unsupported. Stick to
+core operations (`.field`, `map`, `select`, arithmetic, string ops).
 
-### widget-missing-restaction
-**Cause:** A Widget CR references a `resourceRefId` that doesn't resolve to an
-existing RESTAction.
-**Diagnose:**
-```
-k8s_get_resources: restactions.templates.krateo.io in namespace <ns>
-```
-**Remediate (via krateo_portal_agent):** Either create the missing RESTAction,
-or update the Widget's `resourcesRefs` to point at an existing one.
-
-### widget-template-error
-**Cause:** `spec.widgetDataTemplate` jq template failed to execute.
-**Remediate:** Fix the jq template in the Widget CR.
-
-### widget-error-generic
-**Cause:** Widget JSON schema validation failure.
-**Remediate:** Compare the Widget CR spec against the Widget CRD's openAPIV3Schema.
-
-### broken-dependency
-**Cause:** RESTAction `spec.api[].dependsOn.name` references an api entry that
-doesn't exist in the same `spec.api` list, or forms a cycle.
-**Remediate:** Add the missing api entry or break the cycle.
+### broken-dependency (`api not found in apiMap`)
+**Cause:** `spec.api[].dependsOn.name` references an api entry that doesn't
+exist in the same `spec.api` list, or the DAG has a cycle.
+**Diagnose:** Read the RESTAction `spec.api[*]` names and compare with each
+entry's `dependsOn.name`.
+**Remediate:** Add the missing api entry, fix the name, or break the cycle.
 
 ## Verification (via krateo_observability_agent)
 Wait 60 seconds after fix, then:
@@ -97,14 +101,20 @@ Wait 60 seconds after fix, then:
 SELECT count() AS error_count
 FROM otel_logs
 WHERE ResourceAttributes['k8s.pod.name'] LIKE 'snowplow-%'
-  AND Body LIKE '%<original error msg>%'
-  AND JSONExtractString(Body, 'name') = '<resource_name>'
-  AND JSONExtractString(Body, 'namespace') = '<resource_ns>'
+  AND JSONExtractString(Body, 'name') = '<api_name>'
+  AND JSONExtractString(Body, 'namespace') = '<ns>'
+  AND (Body LIKE '%unable to resolve api endpoint reference%'
+       OR Body LIKE '%api call response failure%'
+       OR Body LIKE '%unable to resolve filter%'
+       OR Body LIKE '%api not found in apiMap%')
   AND Timestamp > now() - INTERVAL 2 MINUTE
 ```
 **Success criterion:** `error_count = 0`
 
 ## Escalation
-If the RESTAction/Widget is generated by a Krateo composition (not user-authored),
-delegate to krateo_blueprint_agent to fix the CompositionDefinition template that
-generates it.
+- **If the RESTAction is generated by a Krateo composition** (not user-authored):
+  delegate to `krateo_blueprint_agent` to fix the CompositionDefinition template
+  that generates it. Otherwise the next reconciliation will overwrite the fix.
+- **If the target API itself is broken** (endpoint-unreachable with 5xx):
+  this is a dependency outage, not a RESTAction bug. Escalate to the team
+  that owns the target service.

@@ -71,6 +71,10 @@ If a runbook matches the incident, follow its steps. If no runbook matches, fall
 
 ---
 
+{{include "runbooks/widget_failure"}}
+
+---
+
 {{include "runbooks/composition_failure"}}
 
 ---

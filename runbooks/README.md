@@ -25,7 +25,8 @@ custom loader, no runtime tool calls, no extra services.
 |------|---------|-------------------|
 | `oomkill` | `reason=OOMKilling` events | k8s-agent |
 | `helm_failure` | Helm release failure / image pull errors | helm-agent |
-| `restaction_failure` | Snowplow `unable to resolve *` errors | krateo-restaction-agent / krateo-portal-agent |
+| `restaction_failure` | `endpoint-missing`, `endpoint-unreachable`, `bad-jq-filter`, `broken-dependency` | krateo-restaction-agent |
+| `widget_failure` | `widget-missing-restaction`, `widget-template-error`, `widget-error-generic` | krateo-portal-agent |
 | `composition_failure` | CompositionDefinition/Composition reconcile errors | krateo-blueprint-agent |
 | `infra_self_healing` | Observability stack components down | k8s-agent (P1) |
 

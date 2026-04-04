@@ -106,6 +106,7 @@ kubectl create configmap krateo-runbooks \
   --from-file=oomkill="$RUNBOOKS_DIR/oomkill.md" \
   --from-file=helm_failure="$RUNBOOKS_DIR/helm_failure.md" \
   --from-file=restaction_failure="$RUNBOOKS_DIR/restaction_failure.md" \
+  --from-file=widget_failure="$RUNBOOKS_DIR/widget_failure.md" \
   --from-file=composition_failure="$RUNBOOKS_DIR/composition_failure.md" \
   --from-file=infra_self_healing="$RUNBOOKS_DIR/infra_self_healing.md" \
   --namespace "$NS" \
