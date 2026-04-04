@@ -162,6 +162,18 @@ kubectl rollout status deployment/clickhouse-mcp-server \
 log "ClickHouse MCP Server deployed."
 
 # ---------------------------------------------------------------------------
+# Phase 6b: Apply HA resources (PDBs, NetworkPolicies)
+# ---------------------------------------------------------------------------
+log "==> Phase 6b: Applying HA resources..."
+
+kubectl apply -f "$SCRIPT_DIR/ha/pod-disruption-budgets.yaml"
+kubectl apply -f "$SCRIPT_DIR/ha/network-policies.yaml" 2>/dev/null || \
+  log "NetworkPolicies skipped (CNI may not support them)."
+kubectl apply -f "$SCRIPT_DIR/ha/canary-heartbeat.yaml"
+
+log "HA resources applied (PDBs, NetworkPolicies, heartbeat canary)."
+
+# ---------------------------------------------------------------------------
 # Phase 7: Deploy kagent Agent CRDs (requires kagent v0.8.4+)
 # ---------------------------------------------------------------------------
 log "==> Phase 7: Deploying kagent Agent definitions..."

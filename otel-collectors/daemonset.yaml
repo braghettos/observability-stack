@@ -20,8 +20,8 @@ clusterRole:
   create: true
   rules:
     - apiGroups: [""]
-      resources: [nodes/proxy]
-      verbs: [get]
+      resources: [nodes/proxy, pods]
+      verbs: [get, list, watch]
 
 presets:
   logsCollection:
@@ -109,11 +109,17 @@ config:
     # Strip ANSI color escape sequences from log bodies before export.
     # Colored log formatters embed codes like \x1b[37m...\x1b[0m that are
     # unreadable in ClickHouse / HyperDX.
+    #
+    # Also propagates krateo.io/composition-id from pod labels (extracted by
+    # k8sattributes preset) into LogAttributes so the Observability Agent can
+    # filter pod logs by composition — matching the enrichment the Deployment
+    # collector's compositionresolver does for K8s events.
     transform:
       log_statements:
         - context: log
           statements:
             - 'replace_pattern(body, "\\x1b\\[[0-9;]*[mGKHFABCDsu]", "")'
+            - 'set(attributes["krateo.io/composition-id"], resource.attributes["k8s.pod.labels.krateo.io/composition-id"]) where resource.attributes["k8s.pod.labels.krateo.io/composition-id"] != nil'
     batch:
       send_batch_size: 10000
       timeout: 5s

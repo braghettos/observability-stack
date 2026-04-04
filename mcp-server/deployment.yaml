@@ -17,7 +17,7 @@ metadata:
     app.kubernetes.io/name: clickhouse-mcp-server
     app.kubernetes.io/component: mcp-server
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: clickhouse-mcp-server
