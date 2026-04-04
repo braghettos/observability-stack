@@ -18,7 +18,7 @@ See the full architecture diagram: **[docs/architecture.md](docs/architecture.md
 | **Frontend** | krateo-sse-proxy | Polls ClickHouse every 3s, serves SSE `/notifications/` and REST `/events` |
 | **Alerting** | HyperDX | Monitors `otel_logs`, fires alert/resolution webhooks to Slack `#krateo-troubleshooting` |
 | **AI Agents** | Krateo Autopilot | Orchestrates closed-loop: diagnose → remediate → **verify** → report/escalate |
-| **AI Agents** | Observability Agent | Diagnosis & verification via ClickHouse MCP + krateo-mcp-tools |
+| **AI Agents** | Observability Agent | Diagnosis & verification via ClickHouse MCP |
 | **AI Agents** | k8s-agent | Kubernetes remediation (patch, restart, scale, delete) |
 | **AI Agents** | helm-agent | Helm operations (inspect, rollback, upgrade) |
 | **AI Agents** | Composition Agent | Krateo CRD operations (compositions, blueprints, RESTActions) |
@@ -41,9 +41,6 @@ krateo-observability-stack/
 │   ├── helm-agent.yaml            #   Helm operations
 │   ├── composition-agent.yaml     #   Krateo CRD operations
 │   └── proactive-monitor-agent.yaml # Trend detection & anomaly alerts
-├── autopilot-alert-proxy/         # Alert deduplication proxy (Go)
-│   ├── main.go, Dockerfile, deployment.yaml
-│   └── go.mod
 ├── clickstack/
 │   └── values.yaml                # ClickStack Helm values
 ├── clickhouse-config/
@@ -69,10 +66,7 @@ krateo-observability-stack/
 │   └── canary-heartbeat.yaml      # Self-monitoring heartbeat CronJob
 ├── mcp-server/
 │   ├── deployment.yaml            # ClickHouse MCP Server (raw SQL tools)
-│   ├── github-mcp-server.yaml     # GitHub MCP Server
-│   └── krateo-mcp-tools/          # Pre-built diagnostic MCP tools (Go)
-│       ├── main.go, Dockerfile, deployment.yaml
-│       └── go.mod
+│   └── github-mcp-server.yaml     # GitHub MCP Server
 ├── otel-collectors/
 │   ├── daemonset.yaml             # OTel DaemonSet (logs + metrics + composition-id enrichment)
 │   └── deployment.yaml            # OTel Deployment (K8s events + cluster metrics)
@@ -121,7 +115,7 @@ REPORT: ✅ Resolved → Slack summary
 Key features:
 - **Post-remediation verification** — agents confirm fixes worked before reporting success
 - **Conditional routing** — only invokes relevant agents based on diagnosis
-- **Alert deduplication** — autopilot-alert-proxy suppresses duplicate/storm alerts
+- **Alert deduplication** — HyperDX native alert grouping by namespace + pod
 - **Self-observability** — agent traces flow to ClickHouse via kagent v0.8.4 tracing
 - **Proactive monitoring** — trend detection agent catches issues before alerts fire
 
@@ -156,18 +150,12 @@ helm upgrade kagent kagent/kagent --version 0.8.4 -n kagent-system
 # 2. Deploy agent CRDs
 kubectl apply -f agents/
 
-# 3. Deploy the pre-built diagnostic MCP tools
-kubectl apply -f mcp-server/krateo-mcp-tools/deployment.yaml
-
-# 4. Deploy the alert deduplication proxy
-kubectl apply -f autopilot-alert-proxy/deployment.yaml
-
-# 5. Bootstrap all HyperDX alerts
+# 3. Bootstrap all HyperDX alerts
 cd pod-restart-alert && cp .env.example .env
 # Edit .env with your HyperDX credentials
 ./bootstrap-all-alerts.sh
 
-# 6. Verify agent traces in ClickHouse
+# 4. Verify agent traces in ClickHouse
 kubectl exec -it -n clickhouse-system svc/krateo-clickstack-clickhouse -- \
   clickhouse-client -q "SELECT ServiceName, count() FROM otel_traces WHERE ServiceName LIKE 'krateo-%' GROUP BY ServiceName"
 ```
