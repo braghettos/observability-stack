@@ -1,0 +1,74 @@
+name: E2E Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Test scenario to run (leave empty for all)"
+        required: false
+        default: ""
+      namespace:
+        description: "Kubernetes namespace for test resources"
+        required: false
+        default: "default"
+
+env:
+  TEST_NAMESPACE: ${{ github.event.inputs.namespace || 'default' }}
+
+jobs:
+  e2e:
+    name: Run E2E tests
+    runs-on: ubuntu-latest
+    # Requires a k8s cluster with the observability stack deployed.
+    # Use a self-hosted runner with cluster access, or set up kubeconfig.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: demo/tests/package-lock.json
+
+      - name: Install dependencies
+        working-directory: demo/tests
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: demo/tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Run tests
+        working-directory: demo/tests
+        env:
+          KRATEO_FRONTEND_URL: ${{ secrets.KRATEO_FRONTEND_URL }}
+          KRATEO_SNOWPLOW_URL: ${{ secrets.KRATEO_SNOWPLOW_URL }}
+          CLICKHOUSE_URL: ${{ secrets.CLICKHOUSE_URL }}
+          CLICKHOUSE_MCP_URL: ${{ secrets.CLICKHOUSE_MCP_URL }}
+          KRATEO_USERNAME: ${{ secrets.KRATEO_USERNAME }}
+          KRATEO_PASSWORD: ${{ secrets.KRATEO_PASSWORD }}
+          TEST_NAMESPACE: ${{ env.TEST_NAMESPACE }}
+        run: |
+          if [ -n "${{ github.event.inputs.scenario }}" ]; then
+            npx playwright test scenarios/${{ github.event.inputs.scenario }}
+          else
+            npx playwright test scenarios/
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: demo/tests/playwright-report/
+          retention-days: 14
+
+      - name: Upload screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-screenshots
+          path: demo/tests/test-results/
+          retention-days: 7

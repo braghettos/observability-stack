@@ -12,8 +12,19 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "chromium",
+      name: "ui",
+      testMatch: "scenario2-broken-blueprint.spec.ts",
       use: { browserName: "chromium" },
     },
+    {
+      name: "pipeline",
+      testDir: "scenarios",
+      timeout: 600_000, // 10 min — full-loop tests need more time
+      use: { browserName: "chromium" },
+    },
+  ],
+  reporter: [
+    ["list"],
+    ["html", { open: "never", outputFolder: "playwright-report" }],
   ],
 });

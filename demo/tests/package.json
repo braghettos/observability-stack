@@ -1,0 +1,25 @@
+{
+  "name": "krateo-e2e-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "E2E test suite for the Krateo observability stack and agent orchestration",
+  "scripts": {
+    "test": "playwright test scenarios/",
+    "test:full-loop": "playwright test scenarios/full-loop-assertion.spec.ts",
+    "test:false-positive": "playwright test scenarios/false-positive.spec.ts",
+    "test:helm-rollback": "playwright test scenarios/multi-agent-helm-rollback.spec.ts",
+    "test:mcp-down": "playwright test scenarios/agent-failure-mcp-down.spec.ts",
+    "test:concurrent": "playwright test scenarios/concurrent-alerts.spec.ts",
+    "test:scenario2": "playwright test scenario2-broken-blueprint.spec.ts",
+    "test:quick": "playwright test scenarios/full-loop-assertion.spec.ts scenarios/false-positive.spec.ts",
+    "test:advanced": "playwright test scenarios/multi-agent-helm-rollback.spec.ts scenarios/agent-failure-mcp-down.spec.ts scenarios/concurrent-alerts.spec.ts",
+    "install:browsers": "playwright install --with-deps chromium"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.48.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  }
+}
