@@ -66,14 +66,16 @@ spec:
             - name: CLICKHOUSE_MCP_BIND_PORT
               value: "8000"
           livenessProbe:
-            tcpSocket:
+            httpGet:
+              path: /mcp
               port: 8000
             initialDelaySeconds: 20
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 3
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /mcp
               port: 8000
             initialDelaySeconds: 10
             periodSeconds: 10

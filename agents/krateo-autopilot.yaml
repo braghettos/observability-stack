@@ -103,6 +103,8 @@ spec:
       agentRef: helm-agent
     - type: agent
       agentRef: composition-agent
+    - type: agent
+      agentRef: proactive-monitor-agent
   env:
     # kagent v0.8.4: Enable Go runtime tracing → traces flow to ClickHouse
     - name: OTEL_TRACING_ENABLED

@@ -1,0 +1,101 @@
+---
+# Autopilot Alert Proxy — deduplicates and correlates HyperDX alerts
+# before forwarding to Slack/KAgent.
+#
+# Configure HyperDX to send webhooks to:
+#   http://autopilot-alert-proxy.krateo-system.svc:8090/webhook
+#
+# Apply: kubectl apply -f deployment.yaml -n krateo-system
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autopilot-alert-proxy
+  namespace: krateo-system
+  labels:
+    app.kubernetes.io/name: autopilot-alert-proxy
+    app.kubernetes.io/component: alert-proxy
+    app.kubernetes.io/part-of: krateo-observability-stack
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: autopilot-alert-proxy
+  template:
+    metadata:
+      labels:
+        app: autopilot-alert-proxy
+        app.kubernetes.io/name: autopilot-alert-proxy
+    spec:
+      containers:
+        - name: alert-proxy
+          image: ghcr.io/braghettos/autopilot-alert-proxy:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8090
+              protocol: TCP
+          env:
+            - name: LISTEN_ADDR
+              value: ":8090"
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: slack-webhook-secret
+                  key: webhook-url
+                  optional: true
+            - name: DEDUPE_WINDOW_SECONDS
+              value: "300"
+            - name: COOLDOWN_SECONDS
+              value: "60"
+            - name: STORM_THRESHOLD
+              value: "10"
+            - name: KRATEO_BOT_MENTION
+              valueFrom:
+                secretKeyRef:
+                  name: slack-webhook-secret
+                  key: bot-mention
+                  optional: true
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8090
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8090
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 25m
+              memory: 16Mi
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+      securityContext:
+        runAsNonRoot: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: autopilot-alert-proxy
+  namespace: krateo-system
+  labels:
+    app.kubernetes.io/name: autopilot-alert-proxy
+spec:
+  selector:
+    app: autopilot-alert-proxy
+  ports:
+    - name: http
+      port: 8090
+      targetPort: 8090
+      protocol: TCP
+  type: ClusterIP

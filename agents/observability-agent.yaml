@@ -144,6 +144,10 @@ spec:
       remoteMCPServerRef:
         name: clickhouse-mcp-server
         namespace: krateo-system
+    - type: remoteMCPServer
+      remoteMCPServerRef:
+        name: krateo-mcp-tools
+        namespace: krateo-system
   env:
     - name: OTEL_TRACING_ENABLED
       value: "true"
