@@ -56,10 +56,12 @@ PAYLOAD=$(jq -n \
   --arg name "Pod Restart Alert" \
   --arg message "$MESSAGE" \
   --arg webhookId "$WEBHOOK_ID" \
+  --arg groupBy "k8s.namespace.name,k8s.pod.name" \
   '{
     interval: $interval,
-    threshold: 0,
+    threshold: 2,
     threshold_type: "above",
+    groupBy: ($groupBy | split(",")),
     source: $source,
     savedSearchId: $savedSearchId,
     name: $name,

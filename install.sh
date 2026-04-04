@@ -94,6 +94,15 @@ done
 log "    HyperDX UI: http://${EXT_IP:-<pending>}:3000"
 
 # ---------------------------------------------------------------------------
+# Phase 2c: Create ClickHouse credentials Secrets
+# ---------------------------------------------------------------------------
+log "==> Phase 2c: Creating ClickHouse credentials secrets..."
+
+kubectl apply -f "$SCRIPT_DIR/clickhouse-config/otel-credentials-secret.yaml"
+
+log "ClickHouse credentials secrets created."
+
+# ---------------------------------------------------------------------------
 # Phase 3: Deploy OTel collectors
 # ---------------------------------------------------------------------------
 log "==> Phase 3: Installing OTel collectors..."
@@ -153,6 +162,19 @@ kubectl rollout status deployment/clickhouse-mcp-server \
 log "ClickHouse MCP Server deployed."
 
 # ---------------------------------------------------------------------------
+# Phase 7: Deploy kagent Agent CRDs (requires kagent v0.8.4+)
+# ---------------------------------------------------------------------------
+log "==> Phase 7: Deploying kagent Agent definitions..."
+
+if kubectl api-resources --api-group=kagent.dev 2>/dev/null | grep -q Agent; then
+  kubectl apply -f "$SCRIPT_DIR/agents/"
+  log "Agent definitions deployed."
+else
+  log "kagent CRDs not found — skipping agent deployment."
+  log "Install kagent v0.8.4+ first, then run: kubectl apply -f agents/"
+fi
+
+# ---------------------------------------------------------------------------
 # Done
 # ---------------------------------------------------------------------------
 cat <<EOF
@@ -165,6 +187,8 @@ Krateo ClickHouse Observability Stack installed successfully.
   HyperDX UI:       kubectl port-forward svc/krateo-clickstack-hyperdx $CH_NAMESPACE 8080:8080
   SSE Proxy:        http://krateo-sse-proxy.$KRATEO_NAMESPACE.svc:8080
   MCP Server:       http://clickhouse-mcp-server.$KRATEO_NAMESPACE.svc:8000/mcp
+  Agents:            kubectl get agents -n $KRATEO_NAMESPACE
+  Runbooks:          ./runbooks/*.yaml
 
 Next steps:
   1. Update the blueprint templates in krateoplatformops-blueprints/portal-composition-page-generic

@@ -125,8 +125,8 @@ config:
   exporters:
     clickhouse:
       endpoint: "tcp://krateo-clickstack-clickhouse-clickhouse-headless.clickhouse-system.svc:9000"
-      username: otelcollector
-      password: otelcollectorpass
+      username: "${env:CH_USERNAME}"
+      password: "${env:CH_PASSWORD}"
       database: default
       logs_table_name: otel_logs
       traces_table_name: otel_traces
@@ -149,6 +149,18 @@ config:
         receivers: [hostmetrics, kubeletstats]
         processors: [memory_limiter, k8sattributes, batch]
         exporters: [clickhouse]
+
+extraEnvs:
+  - name: CH_USERNAME
+    valueFrom:
+      secretKeyRef:
+        name: otel-clickhouse-credentials
+        key: username
+  - name: CH_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: otel-clickhouse-credentials
+        key: password
 
 resources:
   limits:

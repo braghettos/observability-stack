@@ -21,7 +21,7 @@
 import { test, expect } from "@playwright/test";
 
 const FRONTEND_URL =
-  process.env.KRATEO_FRONTEND_URL || "http://34.46.217.105:8080";
+  process.env.KRATEO_FRONTEND_URL || "http://localhost:8080";
 const USERNAME = process.env.KRATEO_USERNAME || "admin";
 const PASSWORD = process.env.KRATEO_PASSWORD || "admin";
 
@@ -120,7 +120,7 @@ test.describe("Scenario 2: Broken Blueprint triggers error alert", () => {
     // This simulates what the frontend does when loading a composition page
     const snowplowUrl =
       process.env.KRATEO_SNOWPLOW_URL ||
-      "http://34.135.50.203:8081"; // snowplow LoadBalancer IP
+      "http://localhost:8081"; // set KRATEO_SNOWPLOW_URL or port-forward snowplow
 
     // Get the RESTAction data — this triggers Snowplow to call the broken endpoint
     const response = await request.get(
@@ -147,7 +147,7 @@ test.describe("Scenario 2: Broken Blueprint triggers error alert", () => {
     // This step is optional — just for verification
     const clickhouseMcpUrl =
       process.env.CLICKHOUSE_MCP_URL ||
-      "http://34.46.217.105:8000"; // if port-forwarded
+      "http://localhost:8000"; // port-forward clickhouse-mcp-server
 
     // Wait 30 seconds for logs to propagate
     await new Promise((resolve) => setTimeout(resolve, 30_000));

@@ -29,8 +29,8 @@ spec:
     spec:
       containers:
         - name: mcp-server
-          image: mcp/clickhouse:latest
-          imagePullPolicy: Always
+          image: mcp/clickhouse:0.2.0
+          imagePullPolicy: IfNotPresent
           ports:
             - name: mcp
               containerPort: 8000
@@ -46,9 +46,15 @@ spec:
             - name: CLICKHOUSE_VERIFY
               value: "false"
             - name: CLICKHOUSE_USER
-              value: "default"
+              valueFrom:
+                secretKeyRef:
+                  name: mcp-clickhouse-credentials
+                  key: username
             - name: CLICKHOUSE_PASSWORD
-              value: ""
+              valueFrom:
+                secretKeyRef:
+                  name: mcp-clickhouse-credentials
+                  key: password
             - name: CLICKHOUSE_DATABASE
               value: "default"
             # Switch from stdio (default) to SSE transport so the server is
@@ -80,8 +86,11 @@ spec:
               cpu: 100m
               memory: 64Mi
           securityContext:
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
             allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
 ---
 apiVersion: v1
 kind: Service

@@ -5,7 +5,7 @@ export default defineConfig({
   timeout: 120_000,
   retries: 1,
   use: {
-    baseURL: process.env.KRATEO_FRONTEND_URL || "http://34.46.217.105:8080",
+    baseURL: process.env.KRATEO_FRONTEND_URL || "http://localhost:8080",
     headless: true,
     screenshot: "only-on-failure",
     trace: "on-first-retry",

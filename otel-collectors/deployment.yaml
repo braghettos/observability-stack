@@ -37,9 +37,21 @@ clusterRole:
     - apiGroups: [autoscaling]
       resources: [horizontalpodautoscalers]
       verbs: [get, list, watch]
-    # compositionresolver needs GET on any resource type to resolve
-    # involvedObject references (CRDs from *.krateo.io, etc.)
-    - apiGroups: ["*"]
+    # compositionresolver needs GET on Krateo CRDs to resolve
+    # involvedObject references and read krateo.io/composition-id labels.
+    - apiGroups: ["composition.krateo.io"]
+      resources: ["*"]
+      verbs: [get]
+    - apiGroups: ["templates.krateo.io"]
+      resources: ["*"]
+      verbs: [get]
+    - apiGroups: ["widgets.templates.krateo.io"]
+      resources: ["*"]
+      verbs: [get]
+    - apiGroups: ["deployment.krateo.io"]
+      resources: ["*"]
+      verbs: [get]
+    - apiGroups: ["core.krateo.io"]
       resources: ["*"]
       verbs: [get]
 
@@ -124,8 +136,8 @@ config:
   exporters:
     clickhouse:
       endpoint: "tcp://krateo-clickstack-clickhouse-clickhouse-headless.clickhouse-system.svc:9000"
-      username: otelcollector
-      password: otelcollectorpass
+      username: "${env:CH_USERNAME}"
+      password: "${env:CH_PASSWORD}"
       database: default
       logs_table_name: otel_logs
       traces_table_name: otel_traces
@@ -149,6 +161,18 @@ config:
         processors: [memory_limiter, batch]
         exporters: [clickhouse]
       traces: null
+
+extraEnvs:
+  - name: CH_USERNAME
+    valueFrom:
+      secretKeyRef:
+        name: otel-clickhouse-credentials
+        key: username
+  - name: CH_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: otel-clickhouse-credentials
+        key: password
 
 resources:
   limits:

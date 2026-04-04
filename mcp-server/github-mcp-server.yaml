@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: github-mcp-server
-          image: ghcr.io/github/github-mcp-server:latest
+          image: ghcr.io/github/github-mcp-server:v0.2.0
           args:
             - http
             - --port
@@ -52,6 +52,12 @@ spec:
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 10
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
 ---
 apiVersion: v1
 kind: Service

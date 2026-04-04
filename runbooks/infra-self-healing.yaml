@@ -1,0 +1,103 @@
+---
+# Runbook: Infrastructure Self-Healing
+#
+# Triggered when a critical observability stack component becomes unhealthy.
+# Covers: OTel DaemonSet, OTel Deployment, ClickHouse, MCP Server, SSE Proxy.
+#
+# Detection: Heartbeat canary alert (absence of expected periodic log)
+# or direct component health check failure.
+apiVersion: krateo.io/v1alpha1
+kind: Runbook
+metadata:
+  name: infra-self-healing
+  labels:
+    trigger: component-unhealthy
+spec:
+  trigger:
+    source: hyperdx-alert
+    filter:
+      type: absence
+      description: "Critical observability component stopped producing expected telemetry"
+    components:
+      - name: otel-daemonset
+        namespace: clickhouse-system
+        kind: DaemonSet
+        health_signal: "filelog receiver producing logs"
+      - name: otel-deployment
+        namespace: clickhouse-system
+        kind: Deployment
+        health_signal: "k8sobjects receiver producing events"
+      - name: clickhouse-mcp-server
+        namespace: krateo-system
+        kind: Deployment
+        health_signal: "MCP endpoint responding"
+      - name: krateo-sse-proxy
+        namespace: krateo-system
+        kind: Deployment
+        health_signal: "/health endpoint responding"
+
+  steps:
+    - name: diagnose-component
+      description: "Check if the component pods are running and healthy"
+      agent: k8s-agent
+      action: GetResource
+      params:
+        resource: "deployment/{{component_name}}"
+        namespace: "{{component_namespace}}"
+      output: component_status
+
+    - name: check-pod-logs
+      description: "Get recent logs from the component pods"
+      agent: k8s-agent
+      action: GetPodLogs
+      params:
+        pod_selector: "app.kubernetes.io/name={{component_name}}"
+        namespace: "{{component_namespace}}"
+        tail_lines: 50
+      output: pod_logs
+
+    - name: decide
+      description: "Determine remediation based on pod status"
+      conditions:
+        - condition: "pods_not_ready OR pods_crashlooping"
+          action: restart-component
+        - condition: "pods_running_but_unhealthy"
+          action: restart-component
+        - condition: "pods_running_and_healthy"
+          action: check-dependencies
+
+    - name: restart-component
+      description: "Rollout restart the affected component"
+      agent: k8s-agent
+      action: ExecuteCommand
+      params:
+        command: "kubectl rollout restart {{component_kind}}/{{component_name}} -n {{component_namespace}}"
+
+    - name: check-dependencies
+      description: "Component is running but not producing data — check upstream dependencies"
+      agent: observability
+      action: run_select_query
+      query: |
+        SELECT count() AS recent_logs
+        FROM otel_logs
+        WHERE ResourceAttributes['k8s.deployment.name'] = '{{component_name}}'
+          AND Timestamp > now() - INTERVAL 5 MINUTE
+
+    - name: verify
+      description: "Confirm component is producing telemetry again"
+      agent: observability
+      action: run_select_query
+      wait: 180s
+      query: |
+        SELECT count() AS recent_records
+        FROM otel_logs
+        WHERE Timestamp > now() - INTERVAL 3 MINUTE
+      success_condition: "recent_records > 0"
+
+  escalation:
+    max_retries: 1
+    on_failure:
+      channel: "#krateo-escalation"
+      mention: "@oncall"
+      priority: high
+      message: "Critical observability component '{{component_name}}' in {{component_namespace}} is down and automatic restart failed. The alerting pipeline may be impaired. Immediate human intervention required."

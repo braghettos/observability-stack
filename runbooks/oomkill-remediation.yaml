@@ -1,0 +1,104 @@
+---
+# Runbook: OOMKill Investigation & Remediation
+#
+# Triggered when a pod is OOMKilled. Diagnoses memory usage patterns
+# and remediates by adjusting resource limits.
+apiVersion: krateo.io/v1alpha1
+kind: Runbook
+metadata:
+  name: oomkill-remediation
+  labels:
+    trigger: k8s-event-warning
+    reason: OOMKilling
+spec:
+  trigger:
+    source: hyperdx-alert
+    filter:
+      telemetry_source: k8s-events
+      event_type: Warning
+      event_reason: OOMKilling
+    description: "Pod was OOMKilled — container exceeded its memory limit"
+
+  steps:
+    - name: diagnose-events
+      description: "Find recent OOMKill events for the affected pod"
+      agent: observability
+      action: run_select_query
+      query: |
+        SELECT Timestamp,
+               JSONExtractString(Body, 'object', 'involvedObject', 'name') AS pod,
+               JSONExtractString(Body, 'object', 'involvedObject', 'namespace') AS ns,
+               JSONExtractString(Body, 'object', 'message') AS message
+        FROM otel_logs
+        WHERE ResourceAttributes['telemetry.source'] = 'k8s-events'
+          AND JSONExtractString(Body, 'object', 'reason') = 'OOMKilling'
+          AND JSONExtractString(Body, 'object', 'involvedObject', 'namespace') = '{{namespace}}'
+          AND Timestamp > now() - INTERVAL 1 HOUR
+        ORDER BY Timestamp DESC LIMIT 10
+      output: oomkill_events
+
+    - name: diagnose-memory-usage
+      description: "Check memory utilization trend over the last hour"
+      agent: observability
+      action: run_select_query
+      query: |
+        SELECT toStartOfMinute(Timestamp) AS minute,
+               avg(Value) AS avg_mem_util
+        FROM otel_metrics
+        WHERE MetricName = 'k8s.container.memory_limit_utilization'
+          AND ResourceAttributes['k8s.pod.name'] LIKE '{{pod_name}}%'
+          AND ResourceAttributes['k8s.namespace.name'] = '{{namespace}}'
+          AND Timestamp > now() - INTERVAL 1 HOUR
+        GROUP BY minute
+        ORDER BY minute DESC
+      output: memory_trend
+
+    - name: decide
+      description: "Determine remediation based on memory pattern"
+      condition: "avg_mem_util > 0.9"
+      if_true: increase-limits
+      if_false: investigate-leak
+
+    - name: increase-limits
+      description: "Increase memory limit by 50% to prevent recurrence"
+      agent: k8s-agent
+      action: PatchResource
+      params:
+        resource: "deployment/{{deployment_name}}"
+        namespace: "{{namespace}}"
+        patch: |
+          {"spec":{"template":{"spec":{"containers":[{"name":"{{container_name}}","resources":{"limits":{"memory":"{{new_memory_limit}}"}}}]}}}}
+
+    - name: investigate-leak
+      description: "Memory usage is not consistently high — check for spike patterns in logs"
+      agent: observability
+      action: run_select_query
+      query: |
+        SELECT Timestamp, SeverityText, substring(Body, 1, 200) AS log_preview
+        FROM otel_logs
+        WHERE ResourceAttributes['k8s.pod.name'] LIKE '{{pod_name}}%'
+          AND ResourceAttributes['k8s.namespace.name'] = '{{namespace}}'
+          AND SeverityText IN ('ERROR', 'WARN')
+          AND Timestamp > now() - INTERVAL 1 HOUR
+        ORDER BY Timestamp DESC LIMIT 20
+
+    - name: verify
+      description: "Confirm no more OOMKill events after remediation"
+      agent: observability
+      action: run_select_query
+      wait: 120s
+      query: |
+        SELECT count() AS oom_count
+        FROM otel_logs
+        WHERE ResourceAttributes['telemetry.source'] = 'k8s-events'
+          AND JSONExtractString(Body, 'object', 'reason') = 'OOMKilling'
+          AND JSONExtractString(Body, 'object', 'involvedObject', 'name') LIKE '{{pod_name}}%'
+          AND Timestamp > now() - INTERVAL 2 MINUTE
+      success_condition: "oom_count == 0"
+
+  escalation:
+    max_retries: 2
+    on_failure:
+      channel: "#krateo-escalation"
+      mention: "@oncall"
+      message: "OOMKill remediation failed for {{pod_name}} in {{namespace}} after 2 attempts. Memory limit was increased but OOMKills continue. Possible memory leak requires developer investigation."

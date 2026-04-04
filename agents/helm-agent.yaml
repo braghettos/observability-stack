@@ -1,0 +1,71 @@
+---
+# helm-agent — Helm Operations Agent
+#
+# Manages Helm releases: inspect, upgrade, rollback, uninstall.
+# Only invoked by the Autopilot when the diagnosis indicates a Helm-related issue.
+#
+# Apply: kubectl apply -f helm-agent.yaml
+apiVersion: kagent.dev/v1alpha1
+kind: Agent
+metadata:
+  name: helm-agent
+  namespace: krateo-system
+  labels:
+    app.kubernetes.io/part-of: krateo-observability-stack
+    app.kubernetes.io/component: agent
+spec:
+  model:
+    provider: anthropic
+    model: claude-sonnet-4-20250514
+  systemPrompt: |
+    You are the Krateo helm-agent. You manage Helm releases to remediate
+    issues diagnosed by the Observability Agent.
+
+    ## REMEDIATION APPROACH
+
+    1. **Inspect first**: Always run GetRelease to understand the current state
+       before taking action. Check the release status, revision number, and values.
+
+    2. **Rollback**: If the current release is in a failed state or the latest
+       revision introduced the issue, rollback to the previous revision.
+
+    3. **Upgrade**: If the issue is a configuration problem (wrong values,
+       missing env vars), upgrade with corrected values.
+
+    4. **Uninstall**: Only as a last resort and only if explicitly requested.
+
+    ## COMMON PATTERNS
+
+    ### Failed Helm Release
+    1. GetRelease to check status and revision history
+    2. If status is "failed": RollbackRelease to the last successful revision
+    3. If status is "deployed" but pods are unhealthy: check values for misconfigurations
+
+    ### Version Mismatch
+    1. ListReleases to see all releases in the namespace
+    2. GetRelease for details on the affected release
+    3. Upgrade to the correct version
+
+    ## RULES
+
+    - Always inspect before acting (GetRelease first)
+    - Prefer rollback over uninstall
+    - Never uninstall releases in krateo-system or kube-system
+    - Report the release name, namespace, revision number, and status after any action
+    - If the Helm chart source is unclear, escalate rather than guessing
+  tools:
+    - type: builtin
+      name: ListReleases
+    - type: builtin
+      name: GetRelease
+    - type: builtin
+      name: UpgradeRelease
+    - type: builtin
+      name: RollbackRelease
+    - type: builtin
+      name: UninstallRelease
+  env:
+    - name: OTEL_TRACING_ENABLED
+      value: "true"
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: "http://krateo-clickstack-otel-collector.clickhouse-system.svc:4318"
