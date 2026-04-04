@@ -1,0 +1,214 @@
+---
+# Pod Restart Watcher — Polls ClickHouse every minute for pod restart
+# Warning events and posts to Slack with @KAgent mention on transitions.
+#
+# Replaces the HyperDX alert path when HyperDX alerts are not configured.
+# The Slack bot (a2a-slack-bot) sees the @mention via Socket Mode and
+# forwards to krateo-autopilot → krateo-sre-agent for investigation.
+#
+# Dedup strategy: uses kubectl to maintain a state ConfigMap. Only
+# alerts when a (namespace,pod,reason) appears for the first time in
+# the current 10-minute observation window.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pod-restart-watcher-state
+  namespace: krateo-system
+data:
+  alerted_keys: ""
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pod-restart-watcher
+  namespace: krateo-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-restart-watcher
+  namespace: krateo-system
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get, update, patch]
+    resourceNames: [pod-restart-watcher-state]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pod-restart-watcher
+  namespace: krateo-system
+subjects:
+  - kind: ServiceAccount
+    name: pod-restart-watcher
+    namespace: krateo-system
+roleRef:
+  kind: Role
+  name: pod-restart-watcher
+  apiGroup: rbac.authorization.k8s.io
+---
+# NOTE: The Slack webhook secret is NOT defined in this manifest to avoid
+# committing webhook URLs to version control. Create it separately:
+#
+#   kubectl create secret generic pod-restart-watcher-slack \
+#     --namespace krateo-system \
+#     --from-literal=webhook_url="https://hooks.slack.com/services/XXX/YYY/ZZZ" \
+#     --from-literal=bot_mention="<@BOT_USER_ID>"
+#
+# Or reuse the a2a-slack-bot's webhook (recommended, same channel):
+#
+#   WEBHOOK=$(kubectl get deploy a2a-slack-bot -n krateo-system \
+#     -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="SLACK_ALERT_WEBHOOK_URL")].value}')
+#   BOT_USER=$(kubectl get deploy a2a-slack-bot -n krateo-system \
+#     -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="BOT_USER_ID")].value}')
+#   kubectl create secret generic pod-restart-watcher-slack \
+#     --namespace krateo-system \
+#     --from-literal=webhook_url="$WEBHOOK" \
+#     --from-literal=bot_mention="<@${BOT_USER}>"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pod-restart-watcher
+  namespace: krateo-system
+  labels:
+    app.kubernetes.io/name: pod-restart-watcher
+    app.kubernetes.io/part-of: krateo-observability-stack
+spec:
+  schedule: "* * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 50
+      template:
+        spec:
+          serviceAccountName: pod-restart-watcher
+          restartPolicy: Never
+          containers:
+            - name: watcher
+              image: alpine/k8s:1.31.1
+              env:
+                - name: CLICKHOUSE_URL
+                  value: "http://krateo-clickstack-clickhouse-clickhouse-headless.clickhouse-system.svc:8123"
+                - name: SLACK_WEBHOOK_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: pod-restart-watcher-slack
+                      key: webhook_url
+                - name: BOT_MENTION
+                  valueFrom:
+                    secretKeyRef:
+                      name: pod-restart-watcher-slack
+                      key: bot_mention
+                - name: NAMESPACE
+                  value: krateo-system
+                - name: WINDOW_MINUTES
+                  value: "10"
+                - name: THRESHOLD
+                  value: "2"
+              command:
+                - bash
+                - -c
+                - |
+                  set -e
+
+                  # Read already-alerted keys from state ConfigMap
+                  ALERTED=$(kubectl get configmap pod-restart-watcher-state -n "$NAMESPACE" \
+                    -o jsonpath='{.data.alerted_keys}' 2>/dev/null || echo "")
+                  echo "[watcher] $(echo "$ALERTED" | tr ';' '\n' | grep -c . || echo 0) keys tracked"
+
+                  # Query ClickHouse for pod restart Warning events grouped by (ns,pod,reason)
+                  # Only groups with >= threshold events in the window
+                  QUERY="SELECT concat(ns, '|', pod, '|', reason, '|', toString(cnt)) AS line
+                         FROM (
+                           SELECT JSONExtractString(Body, 'object', 'involvedObject', 'namespace') AS ns,
+                                  JSONExtractString(Body, 'object', 'involvedObject', 'name') AS pod,
+                                  JSONExtractString(Body, 'object', 'reason') AS reason,
+                                  count() AS cnt
+                           FROM otel_logs
+                           WHERE ResourceAttributes['telemetry.source'] = 'k8s-events'
+                             AND JSONExtractString(Body, 'object', 'involvedObject', 'kind') = 'Pod'
+                             AND JSONExtractString(Body, 'object', 'type') = 'Warning'
+                             AND JSONExtractString(Body, 'object', 'involvedObject', 'namespace') NOT LIKE 'bench-ns-%'
+                             AND Timestamp > now() - INTERVAL ${WINDOW_MINUTES} MINUTE
+                           GROUP BY ns, pod, reason
+                           HAVING cnt >= ${THRESHOLD}
+                           ORDER BY cnt DESC
+                           LIMIT 20
+                         )
+                         FORMAT TSV"
+
+                  HTTP_CODE=$(curl -s -o /tmp/ch_response -w "%{http_code}" \
+                    -H "Content-Type: text/plain" \
+                    --data-binary "${QUERY}" "${CLICKHOUSE_URL}/")
+                  RESULTS=$(cat /tmp/ch_response)
+                  if [ "$HTTP_CODE" != "200" ]; then
+                    echo "[watcher] ClickHouse error ${HTTP_CODE}: ${RESULTS}"
+                    exit 1
+                  fi
+                  if [ -z "$RESULTS" ]; then
+                    echo "[watcher] no alerts in window"
+                    exit 0
+                  fi
+
+                  NEW_ALERTED="$ALERTED"
+                  FIRED=0
+
+                  # Process each result line
+                  while IFS= read -r LINE; do
+                    [ -z "$LINE" ] && continue
+
+                    # Parse namespace|pod|reason|count
+                    NS=$(echo "$LINE" | cut -d'|' -f1)
+                    POD=$(echo "$LINE" | cut -d'|' -f2)
+                    REASON=$(echo "$LINE" | cut -d'|' -f3)
+                    CNT=$(echo "$LINE" | cut -d'|' -f4)
+
+                    KEY="${NS}:${POD}:${REASON}"
+
+                    # Skip if already alerted in current window
+                    if echo ";$ALERTED;" | grep -q ";${KEY};"; then
+                      echo "[watcher] skip (already alerted): $KEY"
+                      continue
+                    fi
+
+                    # Fire alert to Slack
+                    MSG="🚨 Pod restart alert: \`${NS}/${POD}\` \`${REASON}\` (${CNT} events in ${WINDOW_MINUTES}min). ${BOT_MENTION} please investigate."
+                    echo "[watcher] FIRE: $KEY"
+
+                    PAYLOAD=$(printf '{"text":"%s"}' "$MSG")
+                    curl -s -X POST -H "Content-Type: application/json" \
+                      -d "$PAYLOAD" "$SLACK_WEBHOOK_URL" > /dev/null
+
+                    NEW_ALERTED="${NEW_ALERTED};${KEY}"
+                    FIRED=$((FIRED + 1))
+                  done <<< "$RESULTS"
+
+                  echo "[watcher] fired $FIRED alert(s)"
+
+                  # Update state ConfigMap (prune old keys by keeping only those still firing)
+                  # Build the new alerted_keys from the current query results
+                  CURRENT_KEYS=""
+                  while IFS= read -r LINE; do
+                    [ -z "$LINE" ] && continue
+                    NS=$(echo "$LINE" | cut -d'|' -f1)
+                    POD=$(echo "$LINE" | cut -d'|' -f2)
+                    REASON=$(echo "$LINE" | cut -d'|' -f3)
+                    KEY="${NS}:${POD}:${REASON}"
+                    # Keep if it was already alerted OR if we just fired it
+                    if echo ";$NEW_ALERTED;" | grep -q ";${KEY};"; then
+                      CURRENT_KEYS="${CURRENT_KEYS};${KEY}"
+                    fi
+                  done <<< "$RESULTS"
+
+                  # Strip leading ;
+                  CURRENT_KEYS="${CURRENT_KEYS#;}"
+
+                  kubectl patch configmap pod-restart-watcher-state -n "$NAMESPACE" \
+                    --type merge -p "{\"data\":{\"alerted_keys\":\"${CURRENT_KEYS}\"}}"
+
+                  echo "[watcher] state updated"
