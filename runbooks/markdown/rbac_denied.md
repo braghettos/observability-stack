@@ -38,5 +38,26 @@ k8s_agent: kubectl auth can-i get <resource> --as=<user-sa> -n <namespace>
 After RBAC fix, reload the portal page. The widget should now show data.
 Check snowplow logs for absence of `not allowed` / `unable to get resource` entries.
 
+## Proactive Scan (run alongside any RBAC investigation)
+
+When investigating ANY RBAC-related issue, also run these cluster-wide checks:
+
+### S24 — Snowplow SA cluster-level RBAC (silent all-widgets-broken)
+```
+k8s_agent: kubectl auth can-i create selfsubjectaccessreviews --as=system:serviceaccount:krateo-system:snowplow
+```
+If `no` → ALL widget RBAC checks silently fail. Every widget renders empty for every user.
+Fix: `kubectl create clusterrolebinding snowplow-sar --clusterrole=system:auth-delegator --serviceaccount=krateo-system:snowplow`
+
+### S17/S21 — Per-RESTAction RBAC audit
+For every RESTAction referenced by widgets in the affected namespace:
+```
+k8s_agent: kubectl get restactions.templates.krateo.io -n <ns> -o json
+```
+For each RESTAction's apiRef, verify snowplow can GET it:
+```
+k8s_agent: kubectl auth can-i get <resource> -n <ns> --as=system:serviceaccount:krateo-system:snowplow
+```
+
 ## Escalation
 If RBAC is correct but widgets still empty, escalate to krateo_portal_agent — likely a widget configuration issue, not RBAC.

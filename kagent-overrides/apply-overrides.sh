@@ -146,6 +146,30 @@ else
   log "  Knowledge directory not found, skipping"
 fi
 
+log "Deploying krateo-agent-guardrails ConfigMap..."
+
+kubectl create configmap krateo-agent-guardrails \
+  --from-file=guardrails="$KNOWLEDGE_DIR/guardrails.md" \
+  --namespace "$NS" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# Wire guardrails into all sub-agents
+for agent in "${SUB_AGENTS[@]}"; do
+  if kubectl get agent "$agent" -n "$NS" &>/dev/null; then
+    CURRENT=$(kubectl get agent "$agent" -n "$NS" \
+      -o jsonpath='{.spec.declarative.promptTemplate.dataSources[?(@.alias=="guardrails")].alias}' 2>/dev/null)
+    if [ "$CURRENT" != "guardrails" ]; then
+      # Ensure promptTemplate.dataSources exists
+      DS=$(kubectl get agent "$agent" -n "$NS" -o jsonpath='{.spec.declarative.promptTemplate.dataSources}' 2>/dev/null)
+      if [ -z "$DS" ]; then
+        kubectl patch agent "$agent" -n "$NS" --type=merge -p '{"spec":{"declarative":{"promptTemplate":{"dataSources":[{"alias":"guardrails","kind":"ConfigMap","name":"krateo-agent-guardrails"}]}}}}' 2>&1 | sed "s/^/  /"
+      else
+        kubectl patch agent "$agent" -n "$NS" --type=json -p '[{"op":"add","path":"/spec/declarative/promptTemplate/dataSources/-","value":{"alias":"guardrails","kind":"ConfigMap","name":"krateo-agent-guardrails"}}]' 2>&1 | sed "s/^/  /"
+      fi
+    fi
+  fi
+done
+
 log "Wiring runbooks dataSource into krateo-sre-agent..."
 
 # Idempotent patch: only add if not already present

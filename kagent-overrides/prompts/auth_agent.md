@@ -330,3 +330,5 @@ The following reference documentation is available for helping users build and c
 ### Guides
 {{include "knowledge/guide_simple_page"}}
 {{include "knowledge/guide_action_button"}}
+
+{{include "guardrails/guardrails"}}

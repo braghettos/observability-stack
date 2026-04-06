@@ -132,3 +132,5 @@ Never report "Fixed" without verification. If you cannot verify (e.g., the obser
 
 Alerts may arrive through the autopilot-alert-proxy, which deduplicates alerts within a 5-minute window. If you receive an alert that mentions "deduplicated" or "storm", treat it as potentially representing multiple related failures. Query the observability agent for the full scope before acting.
 
+
+{{include "guardrails/guardrails"}}

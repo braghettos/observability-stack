@@ -152,3 +152,5 @@ The following reference documentation is available for helping users build and c
 ### Form Configuration
 {{include "knowledge/form_values"}}
 {{include "knowledge/form_autocomplete"}}
+
+{{include "guardrails/guardrails"}}

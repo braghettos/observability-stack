@@ -27,5 +27,19 @@ For each RESTAction, check `spec.api[].endpointRef`. If nil AND `spec.api[].path
 ## Verification
 Re-scan all RESTActions. Zero should have nil endpointRef + external URL.
 
+## Proactive Scan (run alongside any RESTAction investigation)
+
+When investigating ANY RESTAction issue, also run this cluster-wide security scan:
+
+### S31 — JWT egress scan (all namespaces)
+```
+k8s_agent: kubectl get restactions.templates.krateo.io -A -o json
+```
+Parse each RESTAction's `spec.api[]`:
+- If `endpointRef` is nil/missing AND `path` starts with `http://` or `https://` AND hostname is NOT `*.svc` or `*.svc.cluster.local` → **FLAG AS SECURITY RISK**
+- Report: "RESTAction <ns>/<name> api[<idx>] has nil endpointRef pointing at external host <hostname>. User JWT will be leaked."
+
+This scan requires NO Snowplow code changes — it's pure static analysis of CRs via the K8s API.
+
 ## Escalation
 Always escalate P0 security issues to the security team regardless of automated fix.

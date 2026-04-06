@@ -234,3 +234,5 @@ WHERE LogAttributes['krateo.io/composition-id'] = '<composition-uid>'
   AND Timestamp > now() - INTERVAL 1 HOUR
 ORDER BY Timestamp DESC LIMIT 30
 ```
+
+{{include "guardrails/guardrails"}}
