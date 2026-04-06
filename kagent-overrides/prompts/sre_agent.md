@@ -81,6 +81,22 @@ If a runbook matches the incident, follow its steps. If no runbook matches, fall
 
 {{include "runbooks/infra_self_healing"}}
 
+---
+
+{{include "runbooks/rbac_denied"}}
+
+---
+
+{{include "runbooks/security_jwt_egress"}}
+
+---
+
+{{include "runbooks/snowplow_panic"}}
+
+---
+
+{{include "runbooks/snowplow_bootstrap"}}
+
 ## SLO/SLI Monitoring
 
 When asked about service health or reliability:

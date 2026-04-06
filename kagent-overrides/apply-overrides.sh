@@ -53,7 +53,7 @@ fi
 PATCH=$(python3 -c "
 import json
 prompts = {}
-for key in ['autopilot', 'sre_agent', 'observability_agent']:
+for key in ['autopilot', 'sre_agent', 'observability_agent', 'portal_agent', 'restaction_agent', 'blueprint_agent', 'auth_agent']:
     with open('$SCRIPT_DIR/prompts/' + key + '.md') as f:
         prompts[key] = f.read()
 print(json.dumps({'data': prompts}))
@@ -109,8 +109,42 @@ kubectl create configmap krateo-runbooks \
   --from-file=widget_failure="$RUNBOOKS_DIR/widget_failure.md" \
   --from-file=composition_failure="$RUNBOOKS_DIR/composition_failure.md" \
   --from-file=infra_self_healing="$RUNBOOKS_DIR/infra_self_healing.md" \
+  --from-file=rbac_denied="$RUNBOOKS_DIR/rbac_denied.md" \
+  --from-file=security_jwt_egress="$RUNBOOKS_DIR/security_jwt_egress.md" \
+  --from-file=snowplow_panic="$RUNBOOKS_DIR/snowplow_panic.md" \
+  --from-file=snowplow_bootstrap="$RUNBOOKS_DIR/snowplow_bootstrap.md" \
   --namespace "$NS" \
   --dry-run=client -o yaml | kubectl apply -f -
+
+log "Deploying krateo-portal-knowledge ConfigMap..."
+
+KNOWLEDGE_DIR="$SCRIPT_DIR/knowledge"
+if [ -d "$KNOWLEDGE_DIR" ]; then
+  kubectl create configmap krateo-portal-knowledge \
+    --from-file=portal_guide="$KNOWLEDGE_DIR/portal_guide.md" \
+    --from-file=widget_quick_reference="$KNOWLEDGE_DIR/widget_quick_reference.md" \
+    --from-file=form_autocomplete="$KNOWLEDGE_DIR/form_autocomplete.md" \
+    --from-file=form_values="$KNOWLEDGE_DIR/form_values.md" \
+    --from-file=guide_simple_page="$KNOWLEDGE_DIR/guide_simple_page.md" \
+    --from-file=guide_action_button="$KNOWLEDGE_DIR/guide_action_button.md" \
+    --namespace "$NS" \
+    --dry-run=client -o yaml | kubectl apply -f -
+
+  # Wire knowledge into specialist agents
+  for agent in krateo-portal-agent krateo-restaction-agent krateo-blueprint-agent krateo-auth-agent; do
+    CURRENT=$(kubectl get agent "$agent" -n "$NS" \
+      -o jsonpath='{.spec.declarative.promptTemplate.dataSources[?(@.alias=="knowledge")].alias}' 2>/dev/null)
+    if [ "$CURRENT" != "knowledge" ]; then
+      kubectl patch agent "$agent" -n "$NS" --type=json -p '[{
+        "op": "add",
+        "path": "/spec/declarative/promptTemplate/dataSources/-",
+        "value": {"alias": "knowledge", "kind": "ConfigMap", "name": "krateo-portal-knowledge"}
+      }]' 2>&1 | sed "s/^/  /"
+    fi
+  done
+else
+  log "  Knowledge directory not found, skipping"
+fi
 
 log "Wiring runbooks dataSource into krateo-sre-agent..."
 
