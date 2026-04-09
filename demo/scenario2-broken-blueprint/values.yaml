@@ -1,2 +1,2 @@
 appName: demo-broken
-endpointUrl: "http://nonexistent-service:9999/api/data"
+endpointUrl: "http://snowplow.krateo-system.svc:8081"
