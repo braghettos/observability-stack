@@ -17,9 +17,12 @@ global:
 # ---------------------------------------------------------------------------
 clickhouse:
   enabled: true
-  # Override chart default (25.7-alpine) to use ClickHouse 26.2.
-  # 26.2 fixes the dynamic_query_handler bad_function_call crash present in 25.7.
-  image: "clickhouse/clickhouse-server:26.2-alpine"
+  # ClickHouse 26.3 LTS — upgraded from 26.2 for:
+  # - Map column bucketed serialization (2-49x faster ResourceAttributes lookups)
+  # - Materialized CTEs, text index enhancements, partition pruning improvements
+  # - RBAC security fixes (remote() bypass, stricter table function access)
+  # NOTE: Cannot downgrade back to 26.2 after this upgrade (serialization version change)
+  image: "clickhouse/clickhouse-server:26.3-alpine"
   persistence:
     enabled: true
     size: 50Gi
