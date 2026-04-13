@@ -11,7 +11,11 @@
 
 The Krateo agent ecosystem consists of **14 agents**, **5 MCP tool servers**, **4 knowledge ConfigMaps**, and **10 runbooks**, all deployed in the `krateo-system` namespace.
 
-**Entry point:** Users interact via Slack `@KAgent` mentions in `#krateo-troubleshooting`. The `a2a-slack-bot` (Socket Mode) translates mentions into A2A protocol calls against the `krateo-autopilot` orchestrator.
+**Entry points:** Users interact with the Autopilot through two channels:
+- **Slack** — `@KAgent` mentions in `#krateo-troubleshooting`. The `a2a-slack-bot` (Socket Mode) translates mentions into A2A calls. Also receives HyperDX alert webhooks.
+- **Voice** — `krateo-voice-ui` (v0.3.1) at `35.238.240.27:8080`. Browser-based voice interface using Gemini speech-to-text/text-to-speech. Connects to the same Autopilot via A2A.
+
+Both entry points route to `krateo-autopilot` via the kagent controller A2A API. Same agent chain, same routing, same sub-agents.
 
 **Two operating modes:**
 - **Adoption** — users ask how to build blueprints, configure widgets, set up auth → Autopilot routes to domain specialist agents
@@ -28,6 +32,7 @@ graph TB
     subgraph Entry
         Slack["Slack #krateo-troubleshooting<br/>@KAgent mention"]
         Bot["a2a-slack-bot<br/>(Socket Mode)"]
+        Voice["krateo-voice-ui<br/>v0.3.1 · voice interface"]
     end
 
     subgraph Orchestrator
@@ -72,6 +77,7 @@ graph TB
     end
 
     Slack --> Bot --> AP
+    Voice --> AP
     AP --> SRE & BP & PORT & REST & AUTH & DOC & CODE & K8S & HELM & ANS & TFO & TFH
     SRE --> OBS & CODE & K8S & AUTH
     SRE -.-> MC & MK
