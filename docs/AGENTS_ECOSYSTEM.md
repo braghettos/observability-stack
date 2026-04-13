@@ -11,11 +11,12 @@
 
 The Krateo agent ecosystem consists of **14 agents**, **5 MCP tool servers**, **4 knowledge ConfigMaps**, and **10 runbooks**, all deployed in the `krateo-system` namespace.
 
-**Entry points:** Users interact with the Autopilot through two channels:
-- **Slack** — `@KAgent` mentions in `#krateo-troubleshooting`. The `a2a-slack-bot` (Socket Mode) translates mentions into A2A calls. Also receives HyperDX alert webhooks.
-- **Voice** — `krateo-voice-ui` (v0.3.1) at `35.238.240.27:8080`. Browser-based voice interface using Gemini speech-to-text/text-to-speech. Connects to the same Autopilot via A2A.
+**Entry points:** Users interact with agents through three channels:
+- **Slack** — `@KAgent` mentions in `#krateo-troubleshooting`. The `a2a-slack-bot` (Socket Mode) translates mentions into A2A calls. Also receives HyperDX alert webhooks. Always routes to `krateo-autopilot`.
+- **Voice** — `krateo-voice-ui` (v0.3.1) at `35.238.240.27:8080`. Browser-based voice interface using Gemini speech-to-text/text-to-speech. Always routes to `krateo-autopilot` via A2A.
+- **kagent UI** — `kagent-ui` (v0.8.6) at `34.171.236.48:8080`. Web chat interface connecting directly to the kagent controller API. Can target **any agent directly** (not just Autopilot), bypassing the orchestrator's routing. Supports per-user sessions with native streaming.
 
-Both entry points route to `krateo-autopilot` via the kagent controller A2A API. Same agent chain, same routing, same sub-agents.
+Slack and Voice always route through `krateo-autopilot`. The kagent UI can address any of the 14 agents individually, which is useful for development, testing, and direct specialist queries.
 
 **Two operating modes:**
 - **Adoption** — users ask how to build blueprints, configure widgets, set up auth → Autopilot routes to domain specialist agents
@@ -33,6 +34,7 @@ graph TB
         Slack["Slack #krateo-troubleshooting<br/>@KAgent mention"]
         Bot["a2a-slack-bot<br/>(Socket Mode)"]
         Voice["krateo-voice-ui<br/>v0.3.1 · voice interface"]
+        UI["kagent-ui<br/>v0.8.6 · web chat"]
     end
 
     subgraph Orchestrator
@@ -78,6 +80,8 @@ graph TB
 
     Slack --> Bot --> AP
     Voice --> AP
+    UI --> AP
+    UI -.->|direct| SRE & OBS & K8S & HELM & BP & PORT & REST & AUTH & DOC & CODE
     AP --> SRE & BP & PORT & REST & AUTH & DOC & CODE & K8S & HELM & ANS & TFO & TFH
     SRE --> OBS & CODE & K8S & AUTH
     SRE -.-> MC & MK
