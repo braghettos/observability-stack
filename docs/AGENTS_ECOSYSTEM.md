@@ -26,7 +26,25 @@ Slack and Voice always route through `krateo-autopilot`. The kagent UI can addre
 
 ---
 
-## 2. Architecture
+## 2. Why the Autopilot Exists
+
+Users don't know which agent to ask. "My portal page is broken" could be an RBAC issue (k8s-agent), a missing RESTAction (restaction-agent), a bad jq filter (portal-agent), a failed Helm release (helm-agent), or an OOMKilled Snowplow pod (SRE + observability). Requiring the user to classify first defeats the purpose of having agents.
+
+The Autopilot solves three problems:
+
+**1. Classification at the edge.** Users describe their problem in natural language. The Autopilot classifies it and routes to the right specialist. No Krateo expertise required from the user — a junior consultant or a client operator can get the same quality of response as a platform expert.
+
+**2. Multi-agent coordination.** A single user request often requires multiple agents working in sequence. "Why is my widget empty?" needs: SRE (triage) → observability (ClickHouse query) → k8s-agent (RBAC check) → portal-agent (widget validation). The Autopilot orchestrates this chain as one conversation, collecting results from each agent and presenting a unified answer.
+
+**3. Single entry point for all channels.** Slack, Voice, kagent UI, and HyperDX alerts all funnel through the same Autopilot. Routing logic is defined once in the Autopilot's system prompt, not duplicated per channel. Adding a new channel (e.g., Teams, email, ticketing system) requires only pointing it at the Autopilot's A2A endpoint — no routing logic to rebuild.
+
+Without the Autopilot, each channel would need its own classifier, each user would need to pick the right agent, and multi-step investigations would require manual handoffs between agents. The Autopilot is the layer that makes 14 specialists feel like one assistant.
+
+> The kagent UI still allows direct agent access for development and testing — but for production use, the Autopilot is the recommended entry point.
+
+---
+
+## 3. Architecture
 
 ```mermaid
 graph TB
@@ -99,7 +117,7 @@ graph TB
 
 ---
 
-## 3. Agent Roles
+## 4. Agent Roles
 
 ### Tier 1 — Orchestrator
 
@@ -151,7 +169,7 @@ Routes ALL user requests. **Only agent with `stream:true`** (for responsive Slac
 
 ---
 
-## 4. Interaction Flows
+## 5. Interaction Flows
 
 ### Flow 1: Adoption — "How do I create a blueprint?"
 
@@ -255,7 +273,7 @@ sequenceDiagram
 
 ---
 
-## 5. Use Cases with Examples
+## 6. Use Cases with Examples
 
 | # | User prompt | Agents invoked | Tools called | Outcome | How to test |
 |---|-------------|---------------|-------------|---------|-------------|
@@ -272,7 +290,7 @@ sequenceDiagram
 
 ---
 
-## 6. Knowledge System
+## 7. Knowledge System
 
 Knowledge is injected at agent startup via `spec.declarative.promptTemplate.dataSources` referencing ConfigMaps. The kagent template engine expands `{{include "alias/key"}}` directives in the system prompt.
 
@@ -287,7 +305,7 @@ Knowledge is injected at agent startup via `spec.declarative.promptTemplate.data
 
 ---
 
-## 7. Guardrails
+## 8. Guardrails
 
 Loaded from `krateo-agent-guardrails` ConfigMap into all 10 sub-agents:
 
@@ -300,7 +318,7 @@ Loaded from `krateo-agent-guardrails` ConfigMap into all 10 sub-agents:
 
 ---
 
-## 8. Runbooks
+## 9. Runbooks
 
 10 runbooks in `krateo-runbooks` ConfigMap, loaded by `krateo-sre-agent` via `{{include "runbooks/<name>"}}`:
 
@@ -319,7 +337,7 @@ Loaded from `krateo-agent-guardrails` ConfigMap into all 10 sub-agents:
 
 ---
 
-## 9. Measurement Hooks
+## 10. Measurement Hooks
 
 Each interaction flow maps to ClickHouse-native metrics (from `otel_traces` and `otel_logs`):
 
@@ -335,7 +353,7 @@ Each interaction flow maps to ClickHouse-native metrics (from `otel_traces` and 
 
 ---
 
-## 10. Operational Notes
+## 11. Operational Notes
 
 ### Streaming architecture
 
