@@ -1,0 +1,163 @@
+openapi: 3.0.3
+info:
+  title: HyperDX API (Krateo operator subset)
+  description: >-
+    The subset of the HyperDX (ClickStack) REST API that the Krateo HyperDX
+    operator manages declaratively: Slack webhooks and alerts. Verified against
+    ClickStack 3.0.0 / HyperDX appVersion 2.27.0 (paths have no /v1 prefix and
+    expose full create/get/delete). Authentication is a personal API key sent as
+    a Bearer token.
+  version: "2.27.0"
+servers:
+  - url: http://krateo-clickstack.krateo-system:3000/api
+    description: In-cluster HyperDX API (ClusterIP service)
+security:
+  - bearerAuth: []
+paths:
+  /webhooks:
+    get:
+      operationId: listWebhooks
+      summary: List webhooks
+      responses:
+        "200":
+          description: List of webhooks
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Webhook" }
+    post:
+      operationId: createWebhook
+      summary: Create a webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WebhookCreate" }
+      responses:
+        "200":
+          description: Created webhook
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Webhook" }
+  /webhooks/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getWebhook
+      summary: Get a webhook by id
+      responses:
+        "200":
+          description: Webhook
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Webhook" }
+    delete:
+      operationId: deleteWebhook
+      summary: Delete a webhook by id
+      responses:
+        "200": { description: Deleted }
+  /alerts:
+    get:
+      operationId: listAlerts
+      summary: List alerts
+      responses:
+        "200":
+          description: List of alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Alert" }
+    post:
+      operationId: createAlert
+      summary: Create an alert
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AlertCreate" }
+      responses:
+        "200":
+          description: Created alert
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Alert" }
+  /alerts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getAlert
+      summary: Get an alert by id
+      responses:
+        "200":
+          description: Alert
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Alert" }
+    delete:
+      operationId: deleteAlert
+      summary: Delete an alert by id
+      responses:
+        "200": { description: Deleted }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    WebhookCreate:
+      type: object
+      required: [name, url, service]
+      properties:
+        name: { type: string, description: Display name of the webhook }
+        url: { type: string, description: Target URL (e.g. a Slack incoming-webhook URL) }
+        service: { type: string, description: "Webhook service type, e.g. slack", default: slack }
+        description: { type: string }
+    Webhook:
+      allOf:
+        - $ref: "#/components/schemas/WebhookCreate"
+        - type: object
+          properties:
+            _id: { type: string, description: HyperDX-assigned webhook id }
+    AlertCreate:
+      type: object
+      required: [name, threshold, interval, channel]
+      properties:
+        name: { type: string }
+        message: { type: string, description: Alert message body sent to the channel }
+        interval: { type: string, description: "Evaluation window, e.g. 5m, 1m", default: "5m" }
+        threshold: { type: number, description: Threshold value the count is compared against }
+        threshold_type:
+          type: string
+          description: Comparison direction
+          enum: [above, below]
+          default: above
+        source:
+          type: string
+          description: Alert source type
+          default: search
+        savedSearchId: { type: string, description: Source/saved-search id the alert evaluates }
+        groupBy:
+          type: array
+          description: Fields to group/deduplicate the alert by
+          items: { type: string }
+        channel:
+          type: object
+          description: Notification channel (the Slack webhook target)
+          required: [type, webhookId]
+          properties:
+            type: { type: string, enum: [slack_webhook], default: slack_webhook }
+            webhookId: { type: string, description: id of the Webhook to notify }
+    Alert:
+      allOf:
+        - $ref: "#/components/schemas/AlertCreate"
+        - type: object
+          properties:
+            _id: { type: string, description: HyperDX-assigned alert id }
