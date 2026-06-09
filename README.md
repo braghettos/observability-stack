@@ -82,8 +82,9 @@ krateo-observability-stack/
 │   ├── infra-self-healing.yaml
 │   └── alert-storm-suppression.yaml
 ├── sse-proxy/                     # SSE proxy (Go, stdlib-only)
-├── install.sh                     # End-to-end install (8 phases)
 └── README.md
+# NOTE: install.sh removed — the stack is deployed via Krateo compositions
+# (installer umbrella). See Quick Start.
 ```
 
 ## Closed-Loop Architecture
@@ -129,36 +130,45 @@ Key features:
 
 ## Quick Start
 
-```bash
-# The SSE proxy image is built and pushed automatically via GitHub Actions
-# (.github/workflows/sse-proxy.yaml) on every push to main.
-# Image: ghcr.io/braghettos/krateo-sse-proxy:<git-sha>
+> **The imperative `install.sh` has been removed.** The whole observability stack is
+> now driven by Krateo **compositions** through the installer umbrella — nothing in this
+> repo is applied with `kubectl`/`helm` by hand anymore. Each piece `install.sh` used to
+> apply is now a composition component:
+>
+> | install.sh phase | Composition component (chart) |
+> | --- | --- |
+> | 1, 2, 2b, 2c — ClickStack, http-handlers, HyperDX LB, otel creds | `krateo-clickstack` |
+> | 3 — OTel collectors | `otel-collector-deployment` / `otel-collector-daemonset` |
+> | 4, 6 — ClickHouse endpoint secret + MCP server | `clickhouse-mcp-server` |
+> | 5 — SSE proxy | `krateo-sse-proxy` |
+> | 7 — agents | `krateo-autopilot` (kagent agents; Gemini/Vertex) |
+>
+> Everything now runs in a single namespace (`krateo-system`).
 
-# Run the full install (uses the latest image tag by default)
-chmod +x install.sh
-./install.sh
+```bash
+# Install the umbrella; core-provider reconciles the observability compositions.
+helm upgrade --install installer oci://ghcr.io/braghettos/charts/installer \
+  --namespace krateo-system --create-namespace \
+  --set features.observability=true \
+  --set features.observabilityAgents=true \
+  --wait
 ```
 
 ## Agent Quick Start
 
-After installing the observability stack, deploy the agent chain:
+The kagent agents ship as the `krateo-autopilot` composition (driven by the installer
+umbrella with `features.observabilityAgents=true`) — they are no longer applied from
+`agents/` here. The `agents/*.yaml` in this repo remain as a reference of the Anthropic
+variant; the installed agents use Gemini/Vertex.
 
 ```bash
-# 1. Upgrade kagent to v0.8.4
-helm upgrade kagent kagent/kagent --version 0.8.4 -n kagent-system
-
-# 2. Deploy agent CRDs
-kubectl apply -f agents/
-
-# 3. Bootstrap all HyperDX alerts
-cd pod-restart-alert && cp .env.example .env
-# Edit .env with your HyperDX credentials
-./bootstrap-all-alerts.sh
-
-# 4. Verify agent traces in ClickHouse
-kubectl exec -it -n clickhouse-system svc/krateo-clickstack-clickhouse -- \
+# Verify agent traces in ClickHouse (single namespace now: krateo-system)
+kubectl exec -it -n krateo-system svc/krateo-clickstack-clickhouse -- \
   clickhouse-client -q "SELECT ServiceName, count() FROM otel_traces WHERE ServiceName LIKE 'krateo-%' GROUP BY ServiceName"
 ```
+
+> **HyperDX → Slack → @mention alerting** (the `pod-restart-alert/` bootstrap) is the
+> remaining manual/external step and is wired up separately — see that directory.
 
 ## Running E2E Tests
 
